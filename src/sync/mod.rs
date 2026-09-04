@@ -11,11 +11,13 @@
 //! [`localthought/reflector-rs`](https://github.com/localthought/reflector-rs)
 //! is the first intended host.
 //!
-//! [`credentials`] (issue #5), [`resource_model`] (issue #3) and
-//! [`constants`] (issue #6) exist so far. The rest of this module —
-//! `SyncClient`, `ClientConfig`, `SyncError`, `SyncReport`, the `Storage`
-//! trait — lands with the other issues in that series.
+//! [`credentials`] (issue #5), [`resource_model`] (issue #3),
+//! [`constants`] (issue #6) and [`ontology`] (issue #8) exist so far. The
+//! rest of this module — `SyncClient`, `ClientConfig`, `SyncError`,
+//! `SyncReport`, the `Storage` trait — lands with the other issues in that
+//! series.
 
 pub mod constants;
 pub mod credentials;
+pub mod ontology;
 pub mod resource_model;

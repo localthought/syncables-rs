@@ -92,7 +92,9 @@ pub struct ResourceCollectionObject {
 ///
 /// Returns [`Error::NoCrudResources`] if the document declares none — the
 /// CRUD-causality overlay hasn't been applied.
-fn crud_resources(document: &OpenApiDocument) -> Result<IndexMap<String, CrudResourceObject>> {
+pub(super) fn crud_resources(
+    document: &OpenApiDocument,
+) -> Result<IndexMap<String, CrudResourceObject>> {
     let raw = document
         .components
         .as_ref()

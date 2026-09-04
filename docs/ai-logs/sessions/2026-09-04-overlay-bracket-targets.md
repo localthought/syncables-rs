@@ -267,3 +267,75 @@ needed there beyond what #3 already tests.
 
 Ran the same four CI checks locally — all green (105 tests passing, up
 from 97).
+
+Opened [PR #16](https://github.com/localthought/syncables-rs/pull/16),
+subscribed, and — once CI passed — merged it (squash), then unsubscribed.
+
+## Turn 5
+
+**Prompt:** none — continues autonomously, same standing instruction.
+
+**Assistant output (summarized):**
+
+Synced `main`, restarted the branch, and picked issue #8, "Derive an
+Atomic Data ontology from the document and mint its terms under a
+host-supplied public URL." Unblocked (depends on #2, #3, both merged).
+
+Read `reflector-rs/src/ontology.rs` (`SubjectMapper`) and `src/store.rs`
+(`AtomicStorage`, its hand-built test `Ontology` fixture) to confirm the
+boundary already settled by the `ClientConfig`/`Ontology`/`OntologyTerm`
+contract in `reflector-rs/src/syncables.rs`: this crate emits relative
+*paths* only (`github-issues/property/title`, no leading slash, no base
+URL) — minting the actual `internal:`/public URL pair from
+`ClientConfig::ontology_base_url` is entirely the host's job
+(`SubjectMapper`), confirming `derive_ontology` doesn't need a base-URL
+parameter at all, just the document.
+
+The issue leaves two things genuinely unspecified — no TS reference exists
+for this one (it's new to the Rust port) and the given contract stub
+doesn't say: where `Ontology.path`/`.shortname`/`.description` themselves
+come from (as opposed to individual terms', which the issue does specify).
+Decided: derived from `document.info.title`, slugified — flagged this as a
+judgment call in the PR description rather than silently guessing.
+
+Implemented `src/sync/ontology.rs` (new):
+
+- `derive_ontology(document) -> Result<Ontology>`: one Class per
+  `crudResources` entry, one Property per field of that resource's schema
+  — minted once and *shared* across every resource with a same-named field
+  (e.g. `body` on both `issue` and `issueComment` is one property term, not
+  two), matching how RDF-style vocabularies reuse properties across
+  classes.
+- `slugify`: lowercase, `-`-separated, collapsing runs of non-alphanumeric
+  characters (`state_reason` -> `state-reason`); a `claim_shortname` guard
+  that reuses a slug for the *same* original name but errors
+  (`Error::ShortnameCollision`) if a *different* name would collide onto
+  it — validated before ever consulting the property-reuse map, so two
+  different fields that happen to slugify identically can't be silently
+  merged.
+- A small `datatype_url` mapping (string/integer/number/boolean, plus
+  `string`+`format:date-time`/`date`) to `https://atomicdata.dev/datatypes/*`
+  URLs, omitting anything it can't place rather than guessing, per the
+  issue's own instruction.
+- `resource_schema`: resolves `crudResources.<resource>.schema`'s `$ref` by
+  name against `components.schemas`. This `$ref` is a real quirk worth
+  flagging — the overlay adds it via `update` *after* `load_open_api_document`
+  already ran `resolve_refs`, so it's never automatically inlined; had to
+  resolve it by hand here rather than relying on the crate's existing ref
+  resolution.
+- `requires`/`recommends` from the schema's `required` list vs. the rest of
+  its properties, as property *paths* (cross-reference resolution by origin
+  is explicitly the host's job per the issue).
+- `pub(super)` on `resource_model::crud_resources` so `ontology.rs` could
+  reuse the same `crudResources` reader instead of duplicating it.
+- 8 new tests in `tests/unit/sync/ontology.rs`: class derivation, snake_case
+  shortname normalization, the datatype mapping (including the
+  `date-time`->`timestamp` case), required-vs-recommended placement, the
+  shared-property-not-duplicated case (asserting exactly one `body` term
+  across two resources, and that its home resource's field-required-ness
+  still differs per class), a genuine collision
+  (`state_reason`/`state-reason` on one resource), and an unmapped type
+  (`array`) correctly omitting `datatype`.
+
+Ran the same four CI checks locally — all green (113 tests passing, up
+from 105).
