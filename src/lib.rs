@@ -39,9 +39,14 @@ pub mod sync;
 pub use crate::error::{Error, Result};
 
 pub use crate::openapi::load::{load_open_api_document, OpenApiSource};
-pub use crate::openapi::overlay::{apply_overlay, load_overlay, OverlayAction, OverlayDocument};
+pub use crate::openapi::overlay::{
+    apply_overlay, load_open_api_document_with_overlays, load_overlay, OverlayAction,
+    OverlayDocument,
+};
 pub use crate::openapi::resolve_refs::resolve_refs;
-pub use crate::openapi::types::{OpenApiDocument, OperationObject, ParameterObject, SchemaObject};
+pub use crate::openapi::types::{
+    OpenApiDocument, OperationObject, ParameterObject, SchemaObject, ServerObject,
+};
 
 pub use crate::resources::discover::{discover_resources, ResourceRoute};
 
@@ -62,4 +67,12 @@ pub use crate::pagination::types::{
 };
 pub use crate::pagination::validate::validate_pagination_scheme;
 
-pub use crate::sync::storage::{InMemoryStorage, Ontology, Record, Storage, StorageError};
+pub use crate::sync::constants::{bind_url, validate_constants};
+pub use crate::sync::credentials::{base_url, Credentials};
+pub use crate::sync::ontology::{derive_ontology, Ontology, OntologyTerm, TermKind};
+pub use crate::sync::resource_model::{
+    crud_operation, discover_resource_model, AddedField, CollectionMembership, ContextProvider,
+    CrudAction, CrudOperation, CrudResourceObject, IdentityBindingObject, ManagedCollection,
+    ResourceCollectionObject, ResourceIdentityObject, ResourceModel,
+};
+pub use crate::sync::storage::{InMemoryStorage, Record, Storage, StorageError};

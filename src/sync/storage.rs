@@ -16,6 +16,8 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use thiserror::Error;
 
+use super::ontology::Ontology;
+
 /// One record read from or written to a host's [`Storage`].
 ///
 /// Deliberately plain JSON: `value` is exactly the record's own fields.
@@ -40,17 +42,6 @@ pub struct Record {
     /// The record's own fields, as plain JSON.
     pub value: serde_json::Map<String, serde_json::Value>,
 }
-
-/// Placeholder for the Atomic Data ontology description that
-/// [`Storage::put_ontology`] takes.
-///
-/// This crate's [issue #8](https://github.com/localthought/syncables-rs/issues/8)
-/// ("Derive an Atomic Data ontology from the document") defines this
-/// type's real shape — classes and properties derived from the OpenAPI
-/// document's resource model. Until that lands, this is an empty marker
-/// sufficient for [`Storage::put_ontology`] to compile against.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Ontology;
 
 /// Something a host's [`Storage`] implementation failed to do.
 ///
@@ -222,7 +213,7 @@ impl Storage for InMemoryStorage {
         self.ontologies
             .lock()
             .expect("ontologies mutex poisoned")
-            .push(*ontology);
+            .push(ontology.clone());
         Ok(())
     }
 }

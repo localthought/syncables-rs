@@ -75,8 +75,12 @@ the original's directory layout one-to-one:
    `extensions` catch-all so vendor extensions (notably `x-pagination`)
    survive a round-trip. `overlay.rs` is an intentionally minimal
    [Overlay](https://spec.openapis.org/overlay/v1.0.0.html)
-   implementation: `update`/`remove` actions with plain dot-path targets
-   like `$.components`, not the full JSONPath grammar.
+   implementation: `update`/`remove` actions against `$`, dot-paths like
+   `$.components`, and quoted bracket segments like
+   `$.paths['/pets/{petId}'].get`, not the full JSONPath grammar (no
+   wildcards, filters, or numeric/array indexing).
+   `load_open_api_document_with_overlays` loads a document and applies a
+   list of overlay files to it in order, after `$ref`s are resolved.
 
 2. **`resources/discover.rs`** — turns `document.paths` into a list of
    `ResourceRoute`s by pairing each collection path (`/pets`) with its
@@ -134,7 +138,10 @@ their own unique `id` afterward.
   items — the extension only describes pagination metadata, not where
   items live.
 - `request_builder.rs` builds query parameters for a page from a
-  `PageCursor` and computes the next cursor.
+  `PageCursor` and computes the next cursor. `next_step` wraps that with
+  the two cases a cursor alone can't express — following a `nextLink`
+  scheme's URL directly, and a `MAX_PAGES` cap so a misconfigured `Link`
+  header can't spin a traversal forever.
 - `response_parser.rs` parses that state back out of a response (dotted
   `bodyFields` paths, RFC 8288 `Link` parsing for `nextLink`-role headers)
   and derives `has_next_page`.

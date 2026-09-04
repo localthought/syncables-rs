@@ -10,6 +10,15 @@ fn record(namespace: &str, resource: &str, id: &str, value: Value) -> Record {
     }
 }
 
+fn ontology() -> Ontology {
+    Ontology {
+        path: "github-issues".to_string(),
+        shortname: "github-issues".to_string(),
+        description: "Derived from the GitHub Issues OpenAPI document.".to_string(),
+        terms: Vec::new(),
+    }
+}
+
 fn value(name: &str) -> Value {
     json!({ "name": name })
 }
@@ -189,11 +198,11 @@ async fn put_ontology_is_accepted_and_recorded() {
     assert!(storage.ontologies().is_empty());
 
     storage
-        .put_ontology(&Ontology)
+        .put_ontology(&ontology())
         .await
         .expect("put_ontology succeeds");
 
-    assert_eq!(storage.ontologies(), vec![Ontology]);
+    assert_eq!(storage.ontologies(), vec![ontology()]);
 }
 
 #[tokio::test]
@@ -203,7 +212,10 @@ async fn is_usable_as_a_trait_object() {
         .put(&record("cal-1", "event", "1", value("Milo")))
         .await
         .expect("put");
-    storage.put_ontology(&Ontology).await.expect("put_ontology");
+    storage
+        .put_ontology(&ontology())
+        .await
+        .expect("put_ontology");
     assert_eq!(storage.list("cal-1", "event").await.expect("list").len(), 1);
 }
 
@@ -264,7 +276,7 @@ async fn storage_errors_propagate_with_their_message() {
     let err = storage.list("cal-1", "event").await.unwrap_err();
     assert_eq!(err.message, "backend unavailable");
 
-    let err = storage.put_ontology(&Ontology).await.unwrap_err();
+    let err = storage.put_ontology(&ontology()).await.unwrap_err();
     assert_eq!(err.message, "backend unavailable");
 }
 

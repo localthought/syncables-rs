@@ -196,6 +196,16 @@ pub struct InfoObject {
     pub version: String,
 }
 
+/// One entry of the document's top-level `servers` list.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ServerObject {
+    /// Root URL of the API, e.g. `https://api.github.com`.
+    pub url: String,
+    /// Any other key on the server entry.
+    #[serde(flatten)]
+    pub extensions: JsonMap,
+}
+
 /// The `components` section, narrowed to what this crate reads.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ComponentsObject {
@@ -226,6 +236,11 @@ pub struct OpenApiDocument {
     /// Path templates, in document order.
     #[serde(default)]
     pub paths: IndexMap<String, PathItem>,
+    /// The API's base URL(s). The credential layer targets requests at the
+    /// first entry rather than any URL configured separately, so a document
+    /// can't be pointed at the wrong host by mistake.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub servers: Option<Vec<ServerObject>>,
     /// Reusable components.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub components: Option<ComponentsObject>,
