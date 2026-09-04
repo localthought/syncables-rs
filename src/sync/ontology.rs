@@ -30,6 +30,8 @@ const DATATYPE_FLOAT: &str = "https://atomicdata.dev/datatypes/float";
 const DATATYPE_BOOLEAN: &str = "https://atomicdata.dev/datatypes/boolean";
 const DATATYPE_TIMESTAMP: &str = "https://atomicdata.dev/datatypes/timestamp";
 const DATATYPE_DATE: &str = "https://atomicdata.dev/datatypes/date";
+const DATATYPE_ATOMIC_URL: &str = "https://atomicdata.dev/datatypes/atomicURL";
+const DATATYPE_RESOURCE_ARRAY: &str = "https://atomicdata.dev/datatypes/resourceArray";
 
 /// Whether a term describes a Class or a Property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +62,9 @@ pub struct OntologyTerm {
     /// mapping can't place — omitted rather than guessed; the host falls
     /// back to inferring from the JSON value.
     pub datatype: Option<String>,
+    /// For a resource-valued Property: the Class its linked resource(s)
+    /// instantiate. `None` for scalar properties and Classes.
+    pub class_type: Option<String>,
     /// For a Class: the paths (or absolute URLs) of its required
     /// properties, from the schema's `required` list.
     pub requires: Vec<String>,
@@ -185,18 +190,7 @@ fn resource_schema(
 /// fields would normalize to the same slug.
 pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
     let resources = crud_resources(document)?;
-
-    let title = document.info.title.trim();
-    let ontology_path = if title.is_empty() {
-        "ontology".to_string()
-    } else {
-        ontology_shortname(title)
-    };
-    let description = if title.is_empty() {
-        "Derived from an OpenAPI document.".to_string()
-    } else {
-        format!("Derived from the \"{title}\" OpenAPI document.")
-    };
+    let (ontology_path, description) = ontology_identity(document);
 
     let mut terms: Vec<OntologyTerm> = Vec::new();
     let mut class_shortnames = IndexMap::new();
@@ -237,7 +231,20 @@ pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
                     shortname,
                     description: schema_description(field_schema)
                         .unwrap_or_else(|| format!("`{field_name}` of `{resource_name}`.")),
-                    datatype: datatype_url(field_schema),
+                    datatype: match field_schema.schema_type.as_deref() {
+                        Some("object") => Some(DATATYPE_ATOMIC_URL.to_string()),
+                        Some("array")
+                            if field_schema.items.as_deref().is_some_and(|item| {
+                                item.schema_type.as_deref() == Some("object")
+                            }) =>
+                        {
+                            Some(DATATYPE_RESOURCE_ARRAY.to_string())
+                        }
+                        _ => datatype_url(field_schema),
+                    },
+                    class_type: nested_object_schema(field_schema).map(|_| {
+                        format!("{ontology_path}/class/{}", ontology_shortname(field_name))
+                    }),
                     requires: Vec::new(),
                     recommends: Vec::new(),
                 });
@@ -259,9 +266,25 @@ pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
                 .clone()
                 .unwrap_or_else(|| format!("The `{resource_name}` resource.")),
             datatype: None,
+            class_type: None,
             requires,
             recommends,
         });
+
+        for (field_name, field_schema) in schema.iter().flat_map(|s| s.properties.iter()).flatten()
+        {
+            if let Some(nested) = nested_object_schema(field_schema) {
+                add_nested_class(
+                    &ontology_path,
+                    field_name,
+                    nested,
+                    &mut terms,
+                    &mut class_shortnames,
+                    &mut property_shortnames,
+                    &mut property_terms,
+                )?;
+            }
+        }
     }
 
     Ok(Ontology {
@@ -270,4 +293,114 @@ pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
         description,
         terms,
     })
+}
+
+fn ontology_identity(document: &OpenApiDocument) -> (String, String) {
+    let title = document.info.title.trim();
+    if title.is_empty() {
+        (
+            "ontology".to_string(),
+            "Derived from an OpenAPI document.".to_string(),
+        )
+    } else {
+        (
+            ontology_shortname(title),
+            format!("Derived from the \"{title}\" OpenAPI document."),
+        )
+    }
+}
+
+fn nested_object_schema(schema: &SchemaObject) -> Option<&SchemaObject> {
+    match schema.schema_type.as_deref() {
+        Some("object") => Some(schema),
+        Some("array") => schema
+            .items
+            .as_deref()
+            .filter(|item| item.schema_type.as_deref() == Some("object")),
+        _ => None,
+    }
+}
+
+fn add_nested_class(
+    ontology_path: &str,
+    name: &str,
+    schema: &SchemaObject,
+    terms: &mut Vec<OntologyTerm>,
+    class_shortnames: &mut IndexMap<String, String>,
+    property_shortnames: &mut IndexMap<String, String>,
+    property_terms: &mut IndexMap<String, usize>,
+) -> Result<()> {
+    let class_shortname = claim_shortname(class_shortnames, name)?;
+    let class_path = format!("{ontology_path}/class/{class_shortname}");
+    if terms.iter().any(|term| term.path == class_path) {
+        return Ok(());
+    }
+
+    let required: HashSet<&str> = schema
+        .required
+        .as_deref()
+        .into_iter()
+        .flatten()
+        .map(String::as_str)
+        .collect();
+    let mut requires = Vec::new();
+    let mut recommends = Vec::new();
+    for (field_name, field_schema) in schema.properties.iter().flatten() {
+        let shortname = claim_shortname(property_shortnames, field_name)?;
+        let path = if let Some(&index) = property_terms.get(&shortname) {
+            terms[index].path.clone()
+        } else {
+            let path = format!("{ontology_path}/property/{shortname}");
+            property_terms.insert(shortname.clone(), terms.len());
+            terms.push(OntologyTerm {
+                path: path.clone(),
+                kind: TermKind::Property,
+                shortname,
+                description: schema_description(field_schema)
+                    .unwrap_or_else(|| format!("`{field_name}` of `{name}`.")),
+                datatype: match field_schema.schema_type.as_deref() {
+                    Some("object") => Some(DATATYPE_ATOMIC_URL.to_string()),
+                    Some("array") if nested_object_schema(field_schema).is_some() => {
+                        Some(DATATYPE_RESOURCE_ARRAY.to_string())
+                    }
+                    _ => datatype_url(field_schema),
+                },
+                class_type: nested_object_schema(field_schema)
+                    .map(|_| format!("{ontology_path}/class/{}", ontology_shortname(field_name))),
+                requires: Vec::new(),
+                recommends: Vec::new(),
+            });
+            path
+        };
+        if required.contains(field_name.as_str()) {
+            requires.push(path);
+        } else {
+            recommends.push(path);
+        }
+    }
+    terms.push(OntologyTerm {
+        path: class_path,
+        kind: TermKind::Class,
+        shortname: class_shortname,
+        description: schema_description(schema)
+            .unwrap_or_else(|| format!("The nested `{name}` resource.")),
+        datatype: None,
+        class_type: None,
+        requires,
+        recommends,
+    });
+    for (field_name, field_schema) in schema.properties.iter().flatten() {
+        if let Some(nested) = nested_object_schema(field_schema) {
+            add_nested_class(
+                ontology_path,
+                field_name,
+                nested,
+                terms,
+                class_shortnames,
+                property_shortnames,
+                property_terms,
+            )?;
+        }
+    }
+    Ok(())
 }
