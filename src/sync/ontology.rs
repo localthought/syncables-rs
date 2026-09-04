@@ -82,10 +82,14 @@ pub struct Ontology {
     pub terms: Vec<OntologyTerm>,
 }
 
-/// Normalizes a name into a valid Atomic Data slug: lowercase, `-`-separated,
-/// with every run of non-alphanumeric characters collapsed to one `-`
-/// (`state_reason` → `state-reason`, `updated_at` → `updated-at`).
-fn slugify(name: &str) -> String {
+/// Normalizes an OpenAPI name into the Atomic Data shortname used by the
+/// generated ontology: lowercase, `-`-separated, with every run of
+/// non-alphanumeric characters collapsed to one `-` (`state_reason` →
+/// `state-reason`, `updated_at` → `updated-at`).
+///
+/// Hosts use this when matching raw API record keys or resource names to the
+/// ontology terms returned by [`derive_ontology`].
+pub fn ontology_shortname(name: &str) -> String {
     let mut slug = String::with_capacity(name.len());
     let mut pending_dash = false;
     for ch in name.chars() {
@@ -107,7 +111,7 @@ fn slugify(name: &str) -> String {
 /// resource that has a same-named field) and erroring if a *different*
 /// name has already claimed the same slug.
 fn claim_shortname(claimed: &mut IndexMap<String, String>, original: &str) -> Result<String> {
-    let candidate = slugify(original);
+    let candidate = ontology_shortname(original);
     match claimed.get(&candidate) {
         Some(existing) if existing == original => Ok(candidate),
         Some(existing) => Err(Error::ShortnameCollision {
@@ -186,7 +190,7 @@ pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
     let ontology_path = if title.is_empty() {
         "ontology".to_string()
     } else {
-        slugify(title)
+        ontology_shortname(title)
     };
     let description = if title.is_empty() {
         "Derived from an OpenAPI document.".to_string()
