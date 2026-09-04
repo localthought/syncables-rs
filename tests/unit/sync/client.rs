@@ -374,6 +374,43 @@ async fn a_failing_nested_collection_is_a_partial_failure_not_a_fatal_one() {
 }
 
 #[tokio::test]
+async fn reports_the_bound_url_when_a_collection_request_fails() {
+    let document = write_document(&flat_document(Some(
+        json!([{ "url": "https://api.example.com" }]),
+    )));
+    // Registering a response only for the concrete URL also verifies that
+    // configured path constants are substituted before Fetch is called.
+    let fetch = MockFetch::default().respond_json(
+        "https://api.example.com/repos/localthought/test-repo-1/issues",
+        403,
+        &[],
+        json!({}),
+    );
+    let client = SyncClient::new(
+        config(
+            &document,
+            &[("owner", "localthought"), ("repo", "test-repo-1")],
+        ),
+        Arc::new(fetch),
+    )
+    .expect("valid config");
+
+    let storage = InMemoryStorage::new();
+    let report = client
+        .sync(&storage)
+        .await
+        .expect("a collection failure is reported, not fatal");
+
+    assert_eq!(
+        report.errors,
+        [
+            "issues: GET https://api.example.com/repos/localthought/test-repo-1/issues responded 403"
+                .to_string()
+        ]
+    );
+}
+
+#[tokio::test]
 async fn a_storage_failure_is_a_partial_failure_not_a_fatal_one() {
     struct RejectsIssueOne(InMemoryStorage);
 
