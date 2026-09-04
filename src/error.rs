@@ -74,6 +74,21 @@ pub enum Error {
          or an identity binding"
     )]
     UnboundContextParam(String),
+
+    /// Two differently-named resources or fields normalized to the same
+    /// ontology shortname — the ontology would then mint one term for two
+    /// distinct things.
+    #[error(
+        "\"{first}\" and \"{second}\" both normalize to the ontology shortname \"{shortname}\""
+    )]
+    ShortnameCollision {
+        /// The shortname both names normalized to.
+        shortname: String,
+        /// The name that claimed the shortname first.
+        first: String,
+        /// The name that collided with it.
+        second: String,
+    },
 }
 
 /// `Result` specialized to this crate's [`Error`].
