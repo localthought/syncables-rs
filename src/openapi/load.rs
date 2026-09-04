@@ -47,10 +47,7 @@ pub async fn load_open_api_document<'a>(
     source: impl Into<OpenApiSource<'a>> + Send,
 ) -> Result<OpenApiDocument> {
     let raw = match source.into() {
-        OpenApiSource::Path(path) => {
-            let text = tokio::fs::read_to_string(path).await?;
-            parse_yaml(&text)?
-        }
+        OpenApiSource::Path(path) => load_yaml_file(path).await?,
         OpenApiSource::Value(value) => value,
     };
     let resolved = resolve_refs(&raw);
@@ -60,4 +57,20 @@ pub async fn load_open_api_document<'a>(
 /// Parses YAML (or JSON) text into a [`Value`].
 pub fn parse_yaml(text: &str) -> Result<Value> {
     serde_yaml_ng::from_str(text).map_err(Error::from)
+}
+
+/// Reads and parses a YAML/JSON file, wrapping any i/o or parse failure in
+/// [`Error::FileLoad`] so it names the offending path — a bare
+/// [`std::io::Error`] from a failed read doesn't otherwise mention which
+/// file was missing or unreadable.
+pub(crate) async fn load_yaml_file(path: &Path) -> Result<Value> {
+    async {
+        let text = tokio::fs::read_to_string(path).await?;
+        parse_yaml(&text)
+    }
+    .await
+    .map_err(|source| Error::FileLoad {
+        path: path.to_path_buf(),
+        source: Box::new(source),
+    })
 }

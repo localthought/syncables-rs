@@ -75,8 +75,12 @@ the original's directory layout one-to-one:
    `extensions` catch-all so vendor extensions (notably `x-pagination`)
    survive a round-trip. `overlay.rs` is an intentionally minimal
    [Overlay](https://spec.openapis.org/overlay/v1.0.0.html)
-   implementation: `update`/`remove` actions with plain dot-path targets
-   like `$.components`, not the full JSONPath grammar.
+   implementation: `update`/`remove` actions against `$`, dot-paths like
+   `$.components`, and quoted bracket segments like
+   `$.paths['/pets/{petId}'].get`, not the full JSONPath grammar (no
+   wildcards, filters, or numeric/array indexing).
+   `load_open_api_document_with_overlays` loads a document and applies a
+   list of overlay files to it in order, after `$ref`s are resolved.
 
 2. **`resources/discover.rs`** — turns `document.paths` into a list of
    `ResourceRoute`s by pairing each collection path (`/pets`) with its

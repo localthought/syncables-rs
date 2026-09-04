@@ -1,5 +1,7 @@
 //! The crate's error type.
 
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 /// Anything that can go wrong loading a document or talking to a server.
@@ -18,10 +20,23 @@ pub enum Error {
     #[error("could not read document: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// A document or overlay file could not be read or parsed. Wraps the
+    /// underlying [`Error::Io`] or [`Error::Yaml`] with the path that caused
+    /// it, since a bare i/o or parse error doesn't otherwise name the file.
+    #[error("could not load \"{path}\": {source}")]
+    FileLoad {
+        /// The file that could not be loaded.
+        path: PathBuf,
+        /// The underlying read or parse failure.
+        #[source]
+        source: Box<Error>,
+    },
+
     /// An overlay used a JSONPath target outside the supported subset.
     #[error(
-        "unsupported overlay target \"{0}\": only \"$\" or simple dot-paths like \
-         \"$.components...\" are supported"
+        "unsupported overlay target \"{0}\": only \"$\", simple dot-paths like \
+         \"$.components...\", and quoted bracket segments like \
+         \"$.paths['/pets'].get\" are supported"
     )]
     UnsupportedOverlayTarget(String),
 

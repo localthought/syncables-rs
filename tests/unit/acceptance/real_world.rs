@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use syncables::pagination::items::locate_items_field;
 use syncables::{
-    apply_overlay, discover_resources, load_open_api_document, load_overlay,
-    resolve_effective_scheme, OpenApiDocument,
+    apply_overlay, discover_resources, load_open_api_document,
+    load_open_api_document_with_overlays, load_overlay, resolve_effective_scheme, OpenApiDocument,
 };
 
 fn fixture(name: &str) -> PathBuf {
@@ -92,4 +92,41 @@ async fn discovers_resources_in_a_real_document() {
         assert!(route.item_path.starts_with(&route.collection_path));
         assert!(!route.item_param.is_empty());
     }
+}
+
+#[tokio::test]
+async fn loads_a_document_and_applies_its_overlays_in_order() {
+    let document = load_open_api_document_with_overlays(
+        fixture("giphy.yaml").as_path(),
+        &[fixture("giphy-pagination-overlay.yaml")],
+    )
+    .await
+    .expect("document loads with its overlay applied");
+
+    let schemes = document
+        .components
+        .as_ref()
+        .and_then(|c| c.pagination_schemes.as_ref())
+        .expect("the overlay added paginationSchemes");
+    assert!(!schemes.is_empty());
+}
+
+#[tokio::test]
+async fn a_missing_document_names_the_offending_path_in_its_error() {
+    let missing = fixture("does-not-exist.yaml");
+    let error = load_open_api_document(missing.as_path())
+        .await
+        .expect_err("the document does not exist");
+    assert!(error.to_string().contains("does-not-exist.yaml"));
+}
+
+#[tokio::test]
+async fn a_missing_overlay_names_the_offending_path_in_its_error() {
+    let error = load_open_api_document_with_overlays(
+        fixture("giphy.yaml").as_path(),
+        &[fixture("does-not-exist-overlay.yaml")],
+    )
+    .await
+    .expect_err("the overlay does not exist");
+    assert!(error.to_string().contains("does-not-exist-overlay.yaml"));
 }

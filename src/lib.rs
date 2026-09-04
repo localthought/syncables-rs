@@ -38,7 +38,10 @@ pub mod routing;
 pub use crate::error::{Error, Result};
 
 pub use crate::openapi::load::{load_open_api_document, OpenApiSource};
-pub use crate::openapi::overlay::{apply_overlay, load_overlay, OverlayAction, OverlayDocument};
+pub use crate::openapi::overlay::{
+    apply_overlay, load_open_api_document_with_overlays, load_overlay, OverlayAction,
+    OverlayDocument,
+};
 pub use crate::openapi::resolve_refs::resolve_refs;
 pub use crate::openapi::types::{OpenApiDocument, OperationObject, ParameterObject, SchemaObject};
 
