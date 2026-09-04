@@ -60,6 +60,20 @@ pub enum Error {
     /// CRUD-causality overlay hasn't been applied.
     #[error("document declares no crudResources; apply the CRUD-causality overlay")]
     NoCrudResources,
+
+    /// A constant named a parameter the document does not declare (path or
+    /// query, on any operation). A typo'd key here would otherwise sync
+    /// nothing, or scope the sync far wider than intended.
+    #[error("constant \"{0}\" does not name a parameter this document declares")]
+    UnknownConstant(String),
+
+    /// A path template variable is bound by neither a constant, a parent
+    /// record's context provider, nor the resource's own identity binding.
+    #[error(
+        "path variable \"{0}\" is not bound by a constant, a parent record, \
+         or an identity binding"
+    )]
+    UnboundContextParam(String),
 }
 
 /// `Result` specialized to this crate's [`Error`].
