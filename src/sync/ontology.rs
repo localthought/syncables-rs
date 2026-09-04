@@ -190,18 +190,7 @@ fn resource_schema(
 /// fields would normalize to the same slug.
 pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
     let resources = crud_resources(document)?;
-
-    let title = document.info.title.trim();
-    let ontology_path = if title.is_empty() {
-        "ontology".to_string()
-    } else {
-        ontology_shortname(title)
-    };
-    let description = if title.is_empty() {
-        "Derived from an OpenAPI document.".to_string()
-    } else {
-        format!("Derived from the \"{title}\" OpenAPI document.")
-    };
+    let (ontology_path, description) = ontology_identity(document);
 
     let mut terms: Vec<OntologyTerm> = Vec::new();
     let mut class_shortnames = IndexMap::new();
@@ -304,6 +293,21 @@ pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
         description,
         terms,
     })
+}
+
+fn ontology_identity(document: &OpenApiDocument) -> (String, String) {
+    let title = document.info.title.trim();
+    if title.is_empty() {
+        (
+            "ontology".to_string(),
+            "Derived from an OpenAPI document.".to_string(),
+        )
+    } else {
+        (
+            ontology_shortname(title),
+            format!("Derived from the \"{title}\" OpenAPI document."),
+        )
+    }
 }
 
 fn nested_object_schema(schema: &SchemaObject) -> Option<&SchemaObject> {
