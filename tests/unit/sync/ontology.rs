@@ -1,5 +1,7 @@
 use serde_json::json;
-use syncables::{derive_ontology, Error, OntologyTerm, OpenApiDocument, TermKind};
+use syncables::{
+    derive_ontology, ontology_shortname, Error, OntologyTerm, OpenApiDocument, TermKind,
+};
 
 /// The GitHub crud-causality overlay's own example, with the `schema` refs
 /// it declares resolved against `components.schemas` — same shape a real
@@ -97,6 +99,12 @@ fn a_field_normalizes_its_snake_case_shortname() {
     // point of this test).
     let state_reason = term(&ontology, "github-issues/property/state-reason");
     assert_eq!(state_reason.shortname, "state-reason");
+}
+
+#[test]
+fn exposes_the_same_name_normalization_used_for_ontology_terms() {
+    assert_eq!(ontology_shortname("updated_at"), "updated-at");
+    assert_eq!(ontology_shortname("issueComment"), "issuecomment");
 }
 
 #[test]
