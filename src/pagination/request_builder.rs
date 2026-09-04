@@ -2,6 +2,13 @@
 
 use super::types::{PaginationQuery, PaginationResponseState, PaginationSchemeObject, SchemeType};
 
+/// Hard ceiling on pages walked in one paginated traversal, so a
+/// misconfigured `Link` header — or any response that always claims
+/// another page exists — cannot spin forever. Mirrors
+/// [`crate::client::client::MAX_PAGES`], the equivalent constant for the
+/// crate's existing `ApiClient` surface.
+pub const MAX_PAGES: usize = 50;
+
 /// Where the client is in a paginated traversal, independent of scheme type.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PageCursor {
@@ -95,4 +102,43 @@ pub fn next_cursor(
             None
         }
     }
+}
+
+/// What a paginated traversal should do next, after parsing one page's
+/// response.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PageStep {
+    /// Follow this absolute URL directly (a `nextLink` scheme) — built from
+    /// the response's own `Link` header, not rebuilt from the operation's
+    /// path template.
+    FollowLink(String),
+    /// Request the next page with this cursor.
+    NextPage(PageCursor),
+    /// No more pages: the response says so, or [`MAX_PAGES`] was reached.
+    Done,
+}
+
+/// Decides the next step of a paginated traversal, wrapping [`next_cursor`]
+/// with the two cases it deliberately doesn't handle: a `nextLink` scheme
+/// (whose next page is a URL, not a cursor) and the [`MAX_PAGES`] cap.
+///
+/// `pages_fetched` is the number of pages fetched so far, including the one
+/// `state` describes (i.e. after fetching the first page, pass `1`).
+pub fn next_step(
+    scheme: &PaginationSchemeObject,
+    cursor: &PageCursor,
+    state: &PaginationResponseState,
+    items_returned: u64,
+    pages_fetched: usize,
+) -> PageStep {
+    if !state.has_next_page || pages_fetched >= MAX_PAGES {
+        return PageStep::Done;
+    }
+    if scheme.typed() == Some(SchemeType::NextLink) {
+        return state
+            .next_link
+            .clone()
+            .map_or(PageStep::Done, PageStep::FollowLink);
+    }
+    next_cursor(scheme, cursor, state, items_returned).map_or(PageStep::Done, PageStep::NextPage)
 }

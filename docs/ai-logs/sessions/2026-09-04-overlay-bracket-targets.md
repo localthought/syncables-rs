@@ -339,3 +339,63 @@ Implemented `src/sync/ontology.rs` (new):
 
 Ran the same four CI checks locally — all green (113 tests passing, up
 from 105).
+
+Opened [PR #17](https://github.com/localthought/syncables-rs/pull/17),
+subscribed, and — once CI passed — merged it (squash), then unsubscribed.
+
+## Turn 6
+
+**Prompt:** none — continues autonomously, same standing instruction.
+
+**Assistant output (summarized):**
+
+Checked remaining open issues: #4 (pagination) was the only unblocked,
+unclaimed one left — #7's PR #11 is still open and not this session's to
+touch, #1/#9 are the umbrella/final-assembly issues that presuppose the
+others. Synced `main`, restarted the branch, and picked #4.
+
+Read the existing `src/pagination/` module (already "ported and tested"
+per `CLAUDE.md`, predating the #1-9 series) closely against the issue's
+own text before writing anything, since most of what #4 describes turned
+out to already exist: `autodetect::resolve_effective_scheme` already
+checks `x-pagination` before falling back to auto-detection;
+`response_parser::parse_link_header` already handles multiple `rel`
+link-values in one header and quoted `rel="next"` params (`split_links`,
+`rel_is_next`); `request_builder::next_cursor` already documents that a
+`nextLink` scheme's next page should be followed as a URL rather than
+rebuilt from the template; token-in-query (`pageToken`/`nextPageToken`/
+`cursor` roles) was already fully wired in both `request_builder.rs` and
+`response_parser.rs`.
+
+The one genuinely missing piece was "a page limit / total cap, so a
+misconfigured `Link` header cannot spin forever" — there was no walking
+loop yet, `next_cursor` alone can't express "stop, we've walked enough"
+or "here's the literal URL to follow next." Rather than build a full
+transport/HTTP abstraction to drive that loop (which would presuppose
+design decisions on #9's turf, the way PR #11 flagged doing for
+`Storage`), scoped this down to what #4 itself is missing: a
+pure decision function.
+
+Added to `src/pagination/request_builder.rs` (not `src/sync/` — this has
+no coupling to `crudResources`/`ClientConfig`, it belongs with the
+existing generic pagination primitives it wraps):
+
+- `MAX_PAGES: usize = 50`, mirroring `client::client::MAX_PAGES` (the
+  equivalent constant already sitting unused next to the still-`todo!()`
+  `ApiClient::paginate`).
+- `PageStep` (`FollowLink(String)` / `NextPage(PageCursor)` / `Done`) and
+  `next_step(scheme, cursor, state, items_returned, pages_fetched)`,
+  wrapping `next_cursor` with the two cases it deliberately doesn't
+  handle: a `nextLink` scheme (whose next page is a URL, not a cursor —
+  `next_cursor` already returns `None` for that type on purpose) and the
+  `MAX_PAGES` cap.
+- Updated `CLAUDE.md`'s pagination section to describe it.
+- 6 new tests in `tests/unit/pagination/request_builder.rs`: no-next-page
+  stops, an offset scheme advances normally, a `nextLink` scheme returns
+  the literal URL rather than a cursor, a `nextLink` scheme with
+  `has_next_page` set but no link present still stops (rather than
+  panicking or looping), the cap stops a traversal that would otherwise
+  continue forever, and one page short of the cap does not stop early.
+
+Ran the same four CI checks locally — all green (119 tests passing, up
+from 113).
