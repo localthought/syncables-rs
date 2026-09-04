@@ -511,3 +511,64 @@ Synced `main`, restarted the branch, and implemented the read-only half of
 
 Ran the same four CI checks locally — all green (139 tests passing, up
 from 130).
+
+Opened [PR #19](https://github.com/localthought/syncables-rs/pull/19), and
+— once CI passed — merged it (squash), consistent with the standing
+"merge at will" instruction. Confirmed the merge with the user when asked
+again on a stale check-in re-delivery, without repeating the merge.
+
+## Turn 9
+
+**User prompt:**
+
+> Do #1 and then check if the readme, the claude.md and the issues list
+> are all accurate about the current state of the code. Should we publish
+> the crate to some package repo?
+
+**Assistant output (summarized):**
+
+Re-fetched issue #1's exact text and compared it against the merged code:
+`ClientConfig`, `SyncClient::new`/`sync()`, `SyncReport`, `SyncError`,
+and `Credentials`'s redacted `Debug` all already exist, field-for-field
+matching the issue's `## What` section, with the one already-flagged
+`Fetch`-parameter divergence. Nothing left to *build* for #1 — it was a
+closing/housekeeping task, not a coding one. Commented on
+[issue #1](https://github.com/localthought/syncables-rs/issues/1) summarizing
+what satisfies it and where, and closed it (`completed`). Commented on
+[issue #9](https://github.com/localthought/syncables-rs/issues/9) — left
+open — noting the read half is done (PR #19) and what remains
+(local-first write-back).
+
+Checked `README.md` and `CLAUDE.md` against the actual module tree and
+found both stale: neither mentioned `src/sync/` at all — the "Port
+status" table, the top-level "what this is" description, and CLAUDE.md's
+"Architecture" section all still described only the original TypeScript
+port (mock server + `ApiClient`), even though the sync engine (six new
+modules, ~1500 lines, all tested) had landed entirely undocumented at the
+doc level, per the precedent PR #11 set of not touching these files for
+the new engine's individual pieces. Updated both:
+
+- `CLAUDE.md`: added the sync engine to "What this is", clarified "Port
+  status" covers the original port only, and added a full
+  "### The sync engine (`src/sync/`)" architecture subsection describing
+  each of the six modules (`resource_model`, `constants`, `credentials`,
+  `ontology`, `storage`, `client`) at the same level of detail as the
+  existing `openapi`/`pagination` sections, including what's still
+  missing (write-back).
+- `README.md`: added the sync engine to the top description, scoped the
+  existing "Port status" table to the original port, and added a new
+  "## Sync engine" section: its own status table and a `SyncClient`
+  usage example (`rust,ignore`, matching the existing example's
+  convention of not being doctested), plus the `Fetch`-parameter
+  divergence from the `reflector-rs` contract stub.
+
+Ran the same four CI checks locally (doc-only changes, but verified
+nothing broke) — all green, 139 tests unchanged.
+
+On publishing to a package registry (crates.io): recommended against it
+for now rather than doing it — `create_mock_server` and half of
+`ApiClient` (`sync`/`create`/`update`/`remove`/`paginate`/
+`start_polling`) are still `todo!()` and panic if called, so a published
+0.1.0 would have advertised, panicking API surface. Publishing was framed
+as the user's call to make once ready, not something to execute
+unprompted regardless.

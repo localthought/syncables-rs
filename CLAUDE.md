@@ -17,13 +17,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Both understand the [OpenAPI Pagination Schemes Extension](https://github.com/pondersource/openapi-pagination-schemes-extension)
 when a document declares `components.paginationSchemes`.
 
+Alongside that port, the crate also carries a *second, unrelated* public
+surface: a **sync engine** (`SyncClient`) that reads a document's
+[CRUD Causality Extension](https://github.com/pondersource/openapi-extensions/tree/main/spec/crud-causality)
+(`components.crudResources`) and syncs records — including nested
+collections — into a host-provided `Storage` implementation, deriving an
+Atomic-Data-shaped ontology along the way without depending on
+`atomic_lib` itself. This is new scope, not part of the original
+TypeScript port; see [The sync engine](#the-sync-engine-srcsync)
+below and [issues #1–#9](https://github.com/localthought/syncables-rs/issues/1).
+
 The public API surface is defined entirely by `src/lib.rs` re-exports
-(mirroring the original's `src/index.ts`) — check there first to see
-what's intended to be used from outside the crate.
+(mirroring the original's `src/index.ts` for the port, plus the sync
+engine's own types) — check there first to see what's intended to be used
+from outside the crate.
 
 ## Port status — read this before adding features
 
-The crate is **scaffolding**, not a finished port. `README.md` has the
+This section covers the *original TypeScript port* only — the sync
+engine (`src/sync/`) is separate, untracked-by-this-table new scope; see
+[its own section](#the-sync-engine-srcsync) for what exists there.
+
+The port itself is **scaffolding**, not finished. `README.md` has the
 per-module table. In short:
 
 - Ported and tested: `openapi/`, `resources/`, `routing/`, `fake_data/`,
@@ -151,6 +166,71 @@ real APIs the paths that pair into a "resource" are often *not* the
 paginated ones — real pagination usually lives on separate search/list
 endpoints that have no sibling item path and are therefore invisible to
 `discover_resources`.
+
+### The sync engine (`src/sync/`)
+
+A *different* surface from the four-stage pipeline above: not a port of
+the TypeScript `syncables` package, but new scope tracked by
+[issues #1–#9](https://github.com/localthought/syncables-rs/issues/1) — a
+generic engine that reads an OpenAPI document plus a resource model
+derived from its [CRUD Causality Extension](https://github.com/pondersource/openapi-extensions/tree/main/spec/crud-causality)
+(`components.crudResources`), and syncs records into a host-provided
+`Storage` implementation. [`localthought/reflector-rs`](https://github.com/localthought/reflector-rs)
+is the first intended host; its `src/syncables.rs` is the contract this
+module is written against, meant to be deleted once reflector-rs points
+its `use`s here instead. **This crate must not depend on `atomic_lib`** —
+records are plain JSON (`sync::storage::Record`) and the ontology is a
+neutral description (`sync::ontology::Ontology`); rendering either into
+Atomic Data is the host's job.
+
+- **`resource_model.rs`** derives a `ResourceModel` from
+  `components.crudResources`: one `ManagedCollection` per declared
+  collection, with the resource's identity binding (a URL path variable
+  need not be the payload's own `id` — GitHub's issues are addressed by
+  `number`) and a `ContextProvider` for each path variable a nested
+  collection needs from its parent's own records (e.g. `issueComments`'
+  `issue_number`, from the parent `issues` collection's `number` field).
+  Also reads the `x-crud` annotation off an operation (`crud_operation`)
+  — action, resource, collection, write mode/`patchFormat`,
+  `addedFields`, `memberOf`/`removesFrom` — which the write half of #9
+  will need.
+- **`constants.rs`** binds `ClientConfig::constants` into a resource
+  model's path templates: `validate_constants` checks every constant
+  names a declared parameter and every path variable is resolvable — by a
+  constant, a parent record's `ContextProvider`, or a resource's own
+  identity binding — before any request is made; `bind_url`
+  percent-encodes values into a template.
+- **`credentials.rs`** — `Credentials` (`Bearer`/`Anonymous`), whose
+  `Debug` impl never renders the token, and `base_url`, reading the API's
+  base URL from the document's own `servers` rather than separate
+  configuration.
+- **`ontology.rs`** derives an Atomic Data ontology from
+  `components.crudResources`: one Class per resource, one Property per
+  schema field — minted once and shared across every resource with a
+  same-named field, not duplicated per resource. Terms carry only
+  relative paths (no base URL): minting the actual public URL from
+  `ClientConfig::ontology_base_url` is the host's job.
+- **`storage.rs`** — the `Storage` trait
+  (`put`/`get`/`list`/`delete`/`put_ontology`), keyed by
+  `namespace`/`resource`/`id` so records sharing a resource name across
+  different parents (every issue's comments are all `issueComment`) don't
+  collide. `InMemoryStorage` is the reference implementation used by this
+  crate's own tests.
+- **`client.rs`** — `SyncClient::sync()`, the read half of #9: loads the
+  document + overlays, derives the resource model, validates constants,
+  derives and stores the ontology (before any record), then walks every
+  managed collection — nested ones once per parent record, via a
+  cartesian product across however many ancestor `ContextProvider`s a
+  collection has — putting each record into `Storage`. Reuses
+  `client::client::Fetch` for transport (the same injectable-transport
+  design `ApiClient` already uses) rather than a parallel trait, so
+  `SyncClient::new` takes an `Arc<dyn Fetch>` alongside `ClientConfig` —
+  a deliberate divergence from the `reflector-rs` contract stub, which
+  has no way to reach the network at all. One collection or one record
+  failing is recorded in `SyncReport::errors`, not fatal to the rest of
+  the sync. **Local-first writes (`create`/`update`/`remove`, the write
+  queue, retry/backoff) are not implemented yet** — the remaining scope
+  of #9.
 
 ## Conventions
 
