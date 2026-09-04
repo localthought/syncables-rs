@@ -399,3 +399,115 @@ existing generic pagination primitives it wraps):
 
 Ran the same four CI checks locally — all green (119 tests passing, up
 from 113).
+
+Opened [PR #18](https://github.com/localthought/syncables-rs/pull/18),
+and — once CI passed — merged it (squash). Checked PR #11 (issue #7,
+`Storage` trait, from a different session): still open, `mergeable_state:
+"dirty"` (a real conflict against `main`, now several commits ahead of
+that PR's stale base). Not this session's PR to touch uninvited, so
+reported status and stopped rather than fixing it unasked.
+
+## Turn 7
+
+**User prompt:**
+
+> feel free to fix the merge conflict in pr #11 and merge that, then
+> continue working
+
+**Assistant output (summarized):**
+
+Checked out `claude/issue-7-storage-trait` (PR #11's branch, authored by a
+different session) and merged `origin/main` into it with a regular merge
+commit — never rebase or force-push someone else's branch. Three
+conflicts, all in files this session had itself extended since #11
+branched: `src/sync/mod.rs`, `src/lib.rs`, `tests/unit/main.rs`. Two were
+purely additive (both sides adding sibling `pub mod`/re-export/test-module
+lines); one was a real collision worth resolving with judgment rather than
+picking a side: `sync::storage::Ontology` was an explicit placeholder unit
+struct ("this crate's issue #8 defines this type's real shape... until
+that lands, this is an empty marker"). #8 had since landed (this session's
+own PR #17) with the real `Ontology` (`path`/`shortname`/`description`/
+`terms`), so `sync::storage` now imports that instead of redefining its
+own — updated `Storage::put_ontology`/`InMemoryStorage` and the storage
+tests accordingly (the real `Ontology` is `Clone` but not `Copy`, unlike
+the placeholder, so `push(*ontology)` became `push(ontology.clone())`,
+and the tests' bare `Ontology` unit values became a constructed
+`Ontology { path, shortname, description, terms: vec![] }`).
+
+Ran the same four checks (130 tests, up from 119 — PR #11's own 12 tests
+now included) and pushed the merge commit — a normal, non-force push,
+since it fast-forwards from the branch owner's last commit. CI passed;
+merged PR #11 (squash), closing #7.
+
+With #7 merged, only #1 (crate skeleton) and #9 (`client.sync()`) remained
+open in the #1–#9 series (plus #14, the unrelated `schema_type` gap filed
+earlier). Rather than start either autonomously, laid out the concrete
+design decisions #9 actually turns on — reusing `client::client::Fetch`
+for transport vs. forking a new trait, scoping to the read path only vs.
+also building local-first writes, whether `ClientConfig`/`SyncClient`/
+`SyncReport`/`SyncError` should copy the `reflector-rs` contract stub
+verbatim, and the partial-failure model — and asked before writing code.
+
+**User prompt:**
+
+> 1) that's fine
+> 2) yes, let's stick to read-only and leave local-first writes for later
+> 3) yes, copy them from the reflector-rs stub, and then we'll delete that
+> stub later when reflector-rs starts consuming syncables-rs.
+> 4) OK
+
+**Assistant output (summarized):**
+
+Synced `main`, restarted the branch, and implemented the read-only half of
+#9 in a new `src/sync/client.rs`:
+
+- `ClientConfig`/`SyncReport`/`SyncError` copied field-for-field from
+  `reflector-rs/src/syncables.rs`'s contract stub, with one flagged,
+  agreed divergence: that stub's `SyncClient::new` takes only a
+  `ClientConfig`, with no way to reach the network at all. Since this
+  crate has no HTTP client dependency and (per decision 1) reuses
+  `client::client::Fetch` — the same injectable-transport design the
+  existing `ApiClient` already uses — `SyncClient::new` additionally takes
+  an `Arc<dyn Fetch>`.
+- `SyncClient::sync()`: loads the document + overlays, derives the
+  resource model, validates constants, resolves the base URL — failing
+  before any write if the document declares no `servers`, so a doomed
+  sync never even writes an ontology it can't back with data — then
+  derives and stores the ontology, then walks every managed collection.
+- The walk itself is the piece with no existing precedent to port: a
+  retry-until-fixed-point loop over `ResourceModel::collections`, where a
+  collection with no parent-provided context parameter walks once (using
+  only `ClientConfig::constants`), and one with a `ContextProvider`
+  dependency walks once per record of its (by-then-already-read) parent —
+  `binding_combinations` builds the cartesian product across however many
+  ancestor providers a collection has, so nesting more than one level deep
+  falls out of the same code rather than needing special-casing. Each
+  collection's own page-by-page walk reuses #4's `next_step`/`PageCursor`
+  entirely unmodified.
+- Namespace and record id: `namespace` is the collection's own
+  `context_params` values joined by `/` (so a root collection's records
+  get e.g. `"acme/widgets"`, and a nested one's get `"acme/widgets/1"` —
+  the issue doesn't pin this down exactly beyond "derived from the
+  resource model's context parameters," so this is another flagged
+  judgment call, chosen to match the shape of the worked namespace example
+  already in #7's own doc comment); record id comes from
+  `ManagedCollection::id_field`.
+- Partial failure: one collection's request failing (network error,
+  non-2xx status, unparseable body) or one record's `Storage::put` failing
+  is caught and pushed into `SyncReport::errors` as `"<collection>:
+  <message>"`, and the walk continues — never propagated as a fatal
+  `SyncError`.
+- 9 new tests in `tests/unit/sync/client.rs`, against a hand-written
+  `MockFetch` test double (serves a fixed response per exact URL, records
+  every URL requested) rather than a live server: a flat collection sync,
+  a `nextLink`-paginated collection walked across two pages, a nested
+  collection walked once per parent record with per-parent namespacing
+  verified, a 404 on a nested collection recorded as a partial failure
+  while the rest of the sync still succeeds, a `Storage::put` failure
+  likewise partial-not-fatal, `SyncClient::new` rejecting an empty
+  `ontology_base_url`, `sync()` erroring when the document declares no
+  servers (and writing nothing first), `sync()` erroring when a constant
+  is unresolvable, and one asserting the exact set of URLs requested.
+
+Ran the same four CI checks locally — all green (139 tests passing, up
+from 130).

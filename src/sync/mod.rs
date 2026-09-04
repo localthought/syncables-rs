@@ -12,10 +12,11 @@
 //! is the first intended host.
 //!
 //! [`storage`] (issue #7), [`credentials`] (issue #5), [`resource_model`]
-//! (issue #3), [`constants`] (issue #6) and [`ontology`] (issue #8) exist
-//! so far. The rest of this module — `SyncClient`, `ClientConfig`,
-//! `SyncError`, `SyncReport` — lands with the other issues in that series.
+//! (issue #3), [`constants`] (issue #6), [`ontology`] (issue #8) and
+//! [`client`] (issue #9 — the read half; local-first writes are a
+//! follow-up) exist so far.
 
+pub mod client;
 pub mod constants;
 pub mod credentials;
 pub mod ontology;
