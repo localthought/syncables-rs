@@ -342,6 +342,7 @@ impl SyncClient {
             if let Some(authorization) = self.config.credentials.authorization_header() {
                 headers.insert("Authorization".to_string(), authorization);
             }
+            let diagnostic_url = redacted_request_url(&request_url);
             let response = self
                 .fetch
                 .fetch(HttpRequest {
@@ -355,8 +356,8 @@ impl SyncClient {
 
             if !(200..300).contains(&response.status) {
                 return Err(format!(
-                    "{} responded {}",
-                    collection.collection_url, response.status
+                    "GET {} responded {}",
+                    diagnostic_url, response.status
                 ));
             }
 
@@ -393,6 +394,16 @@ impl SyncClient {
         }
 
         Ok(items)
+    }
+}
+
+/// Returns a request URL that is useful in an error message without exposing
+/// values sent as query parameters. Authentication normally travels in a
+/// header, but OpenAPI also permits query-parameter API keys.
+fn redacted_request_url(url: &str) -> String {
+    match url.split_once('?') {
+        Some((base, _)) => format!("{base}?<redacted>"),
+        None => url.to_owned(),
     }
 }
 
