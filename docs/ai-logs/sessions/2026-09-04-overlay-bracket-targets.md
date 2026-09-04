@@ -80,3 +80,68 @@ Implemented, in `syncables-rs`:
 Ran `cargo fmt --all --check`, `cargo clippy --all-targets --all-features
 -- -D warnings`, `cargo test`, and `cargo build --release` — the same four
 checks CI runs — all green (79 tests passing, up from 71).
+
+Opened [PR #12](https://github.com/localthought/syncables-rs/pull/12) and
+subscribed to its activity. CI passed and it merged cleanly with no review
+comments; unsubscribed and cleaned up the scheduled check-in once merged.
+
+## Turn 2
+
+**User prompt:**
+
+> merge at will and continue working
+
+**Assistant output (summarized):**
+
+Merged PR #12 (squash, matching the one precedent in `git log` — PR #10
+was squash-merged too) and unsubscribed from its activity.
+
+Synced `main` and checked PR #11 (`claude/issue-7-storage-trait`, open,
+addressing issue #7) to see what it had already established before picking
+the next issue, since it's the first of the #1–#9 series to land any code:
+a new top-level `src/sync/` module, distinct from the crate's existing
+`syncables`-TypeScript-port surface, with its own module doc explaining
+that split. Followed the same convention rather than inventing a
+different location for new engine code.
+
+Picked issue #5, "Credentials: static bearer token now, document-derived
+OAuth later" — unblocked (only depends on #2, now merged) and, unlike #3/#4/#9,
+self-contained enough not to presuppose design decisions (a transport/HTTP
+layer, the resource model) that belong to whichever issue builds them.
+
+Read `localthought/reflector`'s `src/oauth/static-token.ts`
+(`StaticTokenManager`) and `src/oauth/authed-fetch.ts` to see what the
+credential actually has to do in the original: attach `Authorization:
+Bearer <token>` and retarget a request at the real API base derived from
+the document's `servers` — never a separately configured URL.
+
+Implemented, in `syncables-rs`:
+
+- `src/openapi/types.rs`: added `ServerObject { url, extensions }` and an
+  optional `servers` field on `OpenApiDocument` (previously undeclared,
+  falling into the `extensions` catch-all).
+- `src/sync/mod.rs` (new): the module PR #11 introduced doesn't exist on
+  `main` yet (that PR is unmerged), so this session created it, mirroring
+  #11's own doc comment and adjusting it to name `credentials` as what
+  exists so far in this branch.
+- `src/sync/credentials.rs` (new): `Credentials` (`Bearer(String)` /
+  `Anonymous`), ported field-for-field from the `Credentials` enum in
+  `reflector-rs/src/syncables.rs`'s contract stub, including the redacted
+  `Debug` impl (`Bearer(<redacted>)`, never the token). Added
+  `Credentials::authorization_header()` and a `base_url(document)` function
+  reading `document.servers.first()`.
+- `src/lib.rs`: registered `pub mod sync;`, re-exported `ServerObject`,
+  and re-exported `Credentials`/`base_url` from `sync::credentials`.
+- 7 new tests in `tests/unit/sync/credentials.rs`: header rendering for
+  both variants, `Debug` redaction (asserting the raw token string does
+  not appear in the rendered output), and `base_url` against a populated,
+  absent, and empty `servers` list.
+
+Did not implement `securitySchemes` parsing/validation: the issue's actual
+milestone behaviour is "always send bearer if configured," and validating
+a scheme this crate doesn't yet use anywhere felt like scope the issue
+didn't ask for. Left `SyncError`/`ClientConfig`/`SyncClient` alone too —
+that's #1's/#9's assembly, not this issue's.
+
+Ran the same four CI checks locally — all green (86 tests passing, up from
+79).

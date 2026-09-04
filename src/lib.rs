@@ -34,6 +34,7 @@ pub mod openapi;
 pub mod pagination;
 pub mod resources;
 pub mod routing;
+pub mod sync;
 
 pub use crate::error::{Error, Result};
 
@@ -43,7 +44,9 @@ pub use crate::openapi::overlay::{
     OverlayDocument,
 };
 pub use crate::openapi::resolve_refs::resolve_refs;
-pub use crate::openapi::types::{OpenApiDocument, OperationObject, ParameterObject, SchemaObject};
+pub use crate::openapi::types::{
+    OpenApiDocument, OperationObject, ParameterObject, SchemaObject, ServerObject,
+};
 
 pub use crate::resources::discover::{discover_resources, ResourceRoute};
 
@@ -63,3 +66,5 @@ pub use crate::pagination::types::{
     PaginationSchemesMap, RequestRole, ResponseRole, SchemeType,
 };
 pub use crate::pagination::validate::validate_pagination_scheme;
+
+pub use crate::sync::credentials::{base_url, Credentials};
