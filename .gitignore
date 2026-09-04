@@ -1,6 +1,9 @@
 # Build artifacts
 /target/
 
+# Claude Code agent worktrees (transient, per-session scratch space)
+/.claude/worktrees/
+
 # Coverage
 /coverage
 *.profraw
