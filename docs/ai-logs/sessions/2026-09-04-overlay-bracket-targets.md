@@ -145,3 +145,77 @@ that's #1's/#9's assembly, not this issue's.
 
 Ran the same four CI checks locally — all green (86 tests passing, up from
 79).
+
+Opened [PR #13](https://github.com/localthought/syncables-rs/pull/13),
+subscribed, and — once CI passed — merged it (squash) per the standing
+"merge at will" instruction from Turn 2, then unsubscribed.
+
+## Turn 3
+
+**Prompt:** none — this turn continues autonomously from Turn 2's "merge at
+will and continue working," per the session's Auto Mode instructions.
+
+**Assistant output (summarized):**
+
+Synced `main`, restarted the branch from it, and picked issue #3, "Derive
+the resource model from the `crudResources` overlay extension" — unblocked
+(depends only on #2) and central: #6 and #9 both depend on it.
+
+Read `localthought/reflector`'s `src/sync/resources.ts`
+(`discoverResourceModel`), the reference the issue names, and the actual
+GitHub crud-causality overlay in `localthought/reflector-rs`'s
+`spec/overlays/github/crud-causality-overlay.yaml` to ground the
+implementation in real shapes rather than the issue text alone. Noted that
+`resources.ts` is written for Calendar (adds a client-generated-id policy
+GitHub's server-assigned `addedFields` never need) and that the issue
+additionally describes per-operation `x-crud` (action/mode/patchFormat/
+addedFields/memberOf/removesFrom) that `resources.ts` mostly doesn't read
+either — so treated the issue's own text as the spec and `resources.ts` as
+the reference for the parts it actually covers (identity bindings,
+context-parameter resolution across nested collections).
+
+Implemented `src/sync/resource_model.rs` (new):
+
+- Raw typed structs for `components.crudResources`'s shape
+  (`CrudResourceObject`/`ResourceIdentityObject`/`IdentityBindingObject`/
+  `ResourceCollectionObject`), read from the document's `extensions` catch-all
+  rather than added to `ComponentsObject` — this is CRUD-causality-extension
+  territory, not core OpenAPI, so it stays inside `src/sync/` rather than
+  widening the base type surface in `openapi/types.rs`.
+- `discover_resource_model(document) -> Result<ResourceModel>`: one
+  `ManagedCollection` per declared collection, across every resource,
+  porting `resources.ts`'s two load-bearing details — a resource's URL
+  identity need not be its payload's own `id` (GitHub issues: `number`),
+  and a nested collection's unresolved path variable (`issue_number` on
+  `issueComments`) is resolved via a `ContextProvider` pointing at the
+  parent collection/field, not left dangling.
+- `CrudOperation`/`CrudAction`/`AddedField`/`CollectionMembership` +
+  `crud_operation(operation)`, reading the `x-crud` block per operation —
+  action, resource, collection, update mode/patchFormat, server-added
+  fields, and collection membership (`memberOf`/`removesFrom`, the latter
+  either a named list or `"*"`, hand-written `Deserialize` since that's two
+  JSON shapes for one field).
+- `Error::NoCrudResources` for a document with no `crudResources` at all.
+- `src/lib.rs`/`src/sync/mod.rs`: registered and re-exported the module.
+- 12 new tests in `tests/unit/sync/resource_model.rs`, built from a
+  synthetic document shaped exactly like the real GitHub overlay's own
+  example: collection derivation, the `number`-not-`id` identity case, the
+  nested-collection provider resolution, constant-only params having no
+  provider, every `x-crud` action shape, and the malformed-`removesFrom`
+  error path.
+
+Also vendored `localthought/reflector-rs`'s `spec/github-issues.openapi.yaml`
++ its three overlays to write an end-to-end acceptance test (load + apply
+overlays + derive the resource model, against real GitHub-shaped material) —
+but the base document failed to parse: its `body`/`state_reason` schemas use
+JSON Schema's `type: [string, "null"]` array form for nullability, which
+`SchemaObject::schema_type` (typed `Option<String>`) can't represent. Fixing
+that touches `fake_data`/`pagination`, modules CLAUDE.md marks "ported and
+tested," for a concern unrelated to #3 — rather than widen this PR into that,
+removed the vendored fixture and acceptance test, and filed
+[#14](https://github.com/localthought/syncables-rs/issues/14) documenting
+the gap for whoever picks it up (with a suggested `SchemaType` enum shape).
+The synthetic-JSON tests already cover #3's logic thoroughly on their own.
+
+Ran the same four CI checks locally — all green (97 tests passing, up from
+86).

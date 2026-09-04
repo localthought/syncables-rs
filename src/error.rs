@@ -55,6 +55,11 @@ pub enum Error {
     /// A resource path was asked for that the document does not declare.
     #[error("unknown resource \"{0}\"")]
     UnknownResource(String),
+
+    /// The document declares no `components.crudResources`; the
+    /// CRUD-causality overlay hasn't been applied.
+    #[error("document declares no crudResources; apply the CRUD-causality overlay")]
+    NoCrudResources,
 }
 
 /// `Result` specialized to this crate's [`Error`].

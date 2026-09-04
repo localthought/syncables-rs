@@ -68,3 +68,8 @@ pub use crate::pagination::types::{
 pub use crate::pagination::validate::validate_pagination_scheme;
 
 pub use crate::sync::credentials::{base_url, Credentials};
+pub use crate::sync::resource_model::{
+    crud_operation, discover_resource_model, AddedField, CollectionMembership, ContextProvider,
+    CrudAction, CrudOperation, CrudResourceObject, IdentityBindingObject, ManagedCollection,
+    ResourceCollectionObject, ResourceIdentityObject, ResourceModel,
+};
