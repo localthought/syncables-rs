@@ -127,6 +127,10 @@ pub struct ManagedCollection {
     /// parent record or a configured constant (see
     /// [issue #6](https://github.com/localthought/syncables-rs/issues/6)).
     pub context_params: Vec<String>,
+    /// Path variables in `item_url` that this resource's own identity
+    /// binding supplies from the record itself (e.g. `issue_number`, from
+    /// `number`) — not from a constant or a parent record.
+    pub identity_params: Vec<String>,
     /// Fixed query parameters to add to the list request, from the
     /// collection's `x-list-query`.
     pub list_query: IndexMap<String, String>,
@@ -171,7 +175,7 @@ impl ResourceModel {
 }
 
 /// The path variables (`{...}` segments) in a URL template, in order.
-fn path_variables(template: &str) -> Vec<String> {
+pub(super) fn path_variables(template: &str) -> Vec<String> {
     let mut variables = Vec::new();
     let mut rest = template;
     while let Some(start) = rest.find('{') {
@@ -230,6 +234,7 @@ pub fn discover_resource_model(document: &OpenApiDocument) -> Result<ResourceMod
             .unwrap_or_default();
 
         let mut id_field = "id".to_string();
+        let mut identity_params = Vec::new();
         if let Some(identity_bindings) = resource
             .identity
             .as_ref()
@@ -245,6 +250,7 @@ pub fn discover_resource_model(document: &OpenApiDocument) -> Result<ResourceMod
                     && !collection_url_has(resource, param);
                 if is_own_identity {
                     id_field.clone_from(&binding.field);
+                    identity_params.push(param.clone());
                 }
             }
         }
@@ -271,6 +277,7 @@ pub fn discover_resource_model(document: &OpenApiDocument) -> Result<ResourceMod
                 item_url: item_url.to_string(),
                 id_field: id_field.clone(),
                 context_params: path_variables(&collection.url_template),
+                identity_params: identity_params.clone(),
                 list_query,
             });
         }

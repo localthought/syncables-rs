@@ -219,3 +219,51 @@ The synthetic-JSON tests already cover #3's logic thoroughly on their own.
 
 Ran the same four CI checks locally — all green (97 tests passing, up from
 86).
+
+Opened [PR #15](https://github.com/localthought/syncables-rs/pull/15),
+subscribed, and — once CI passed — merged it (squash), then unsubscribed.
+
+## Turn 4
+
+**Prompt:** none — continues autonomously, same standing instruction.
+
+**Assistant output (summarized):**
+
+Synced `main`, restarted the branch, and picked issue #6, "Constants: bind
+configured values into path and query parameters" — now unblocked (depends
+on #3, just merged) and a natural continuation of the resource-model work
+still in context.
+
+Implemented `src/sync/constants.rs` (new):
+
+- `validate_constants(document, model, constants)`: checks every constant
+  key names a parameter the document actually declares (path or query, on
+  any operation) — `Error::UnknownConstant` otherwise, so a typo'd
+  `repository=` can't silently widen a sync to the whole account rather
+  than one repo. Then checks every path variable a managed collection
+  needs is resolvable — by a constant, a parent record's `ContextProvider`
+  (from #3), or the resource's own identity binding — `Error::UnboundContextParam`
+  otherwise. The identity-binding case needed a small extension to #3's
+  `ManagedCollection`: a new `identity_params` field (the item URL's own
+  self-bound path variables, e.g. `issue_number` for `issue`) so
+  `issueComments`' `{comment_id}` isn't wrongly flagged as needing outside
+  resolution.
+- `bind_url(template, values)`: substitutes `{param}` segments,
+  percent-encoding each value (a hand-rolled path-segment `AsciiSet` via
+  the existing `percent-encoding` dependency, mirroring the `url` crate's
+  `PATH_SEGMENT_ENCODE_SET` rather than adding that crate for one constant).
+- Two new `Error` variants (`UnknownConstant`, `UnboundContextParam`) and a
+  `pub(super)` on `resource_model::path_variables` so `constants.rs` could
+  reuse it instead of re-implementing template parsing.
+- 9 new tests in `tests/unit/sync/constants.rs`: valid owner/repo binding,
+  the undeclared-constant error, the unbound-variable error, the
+  nested-collection-provider and own-identity-binding cases both needing no
+  constant, percent-encoding on bind, an unbound bind_url call, and the
+  no-variables-to-bind pass-through.
+
+`x-list-query`'s "applied to every list request" behaviour was already
+delivered by #3's `ManagedCollection::list_query`, so nothing new was
+needed there beyond what #3 already tests.
+
+Ran the same four CI checks locally — all green (105 tests passing, up
+from 97).
