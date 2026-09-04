@@ -1,0 +1,135 @@
+# syncables-rs
+
+A Rust port of [localthought/syncables](https://github.com/localthought/syncables).
+
+Reads an OpenAPI document and gives you:
+
+- a **mock API server** that implements it, backed by a real (in-memory)
+  CRUD store per resource, seeded with fake data generated from the
+  document's schemas;
+- an **API client** that talks to any server implementing that OpenAPI
+  document and keeps a local copy of each resource collection in sync.
+
+## Port status
+
+This crate is **scaffolding**. The module tree mirrors the TypeScript
+original's `src/` one-to-one, and the following are ported and tested:
+
+| Area | Module | Status |
+| --- | --- | --- |
+| Document loading | `openapi::load`, `openapi::resolve_refs` | ported |
+| Overlays | `openapi::overlay` | ported |
+| OpenAPI type surface | `openapi::types` | ported |
+| Resource discovery | `resources::discover` | ported |
+| Path routing | `routing::router` | ported |
+| Fake data | `fake_data::generate` | ported |
+| Pagination | `pagination::{types, validate, autodetect, items, request_builder, response_parser}` | ported |
+| Mock server store | `mock_server::store` | ported |
+| Client storage | `client::storage` | ported |
+| Mock server handler | `mock_server::server` | **scaffolded** — public surface only |
+| Client sync/writes | `client::client` | **scaffolded** — public surface only |
+
+The two scaffolded modules carry their full ported public API, doc
+comments and constants; their function bodies are `todo!()`, each naming
+the TypeScript source file and function it is to be ported from. Nothing
+in this crate silently returns a wrong answer — the parts that exist are
+covered by tests, including acceptance tests against unmodified real-world
+documents.
+
+## Usage
+
+```sh
+cargo build
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all --check
+```
+
+Once the client and mock server are ported, the shape will be:
+
+```rust,ignore
+use syncables::{create_api_client, create_mock_server, load_open_api_document, ApiClientOptions};
+
+let document = load_open_api_document("./petstore.yaml").await?;
+
+let server = create_mock_server(document.clone());
+let address = server.listen(None).await?;
+
+let client = create_api_client(document, ApiClientOptions::new(address.url));
+client.sync().await?; // pulls every discovered resource collection into local storage
+
+let pets = client.list("/pets").await?;
+```
+
+A "resource" is any pair of an OpenAPI collection path and its matching
+item path, e.g. `/pets` and `/pets/{petId}`. Paths without that pairing
+(health checks, one-off actions, etc.) are served from their documented
+examples/schemas but aren't treated as syncable resources.
+
+## Differences from the TypeScript original
+
+The port keeps the original's names, comments and behaviour wherever it
+can. Where Rust forced a decision, it went like this:
+
+- **`Record<string, unknown>` → `serde_json::Map<String, Value>`**, and
+  `unknown` → `serde_json::Value`. Maps that need document order
+  (schema properties, paths, collections) use `IndexMap`, and
+  `serde_json` is built with `preserve_order`: `locate_items_field` picks
+  the *first* array-typed property, so order is load-bearing.
+- **The injectable `fetch` becomes a `Fetch` trait**
+  (`client::client::Fetch`). As in the original, it is the only extension
+  point — there is no built-in notion of auth, so authenticating means
+  supplying an implementation that adds the right header to every request.
+- **`StorageAdapter` is an `async_trait`**, with `InMemoryStorageAdapter`
+  as the default, matching the original's pluggable adapter.
+- **Pagination roles stay strings** rather than becoming closed enums: the
+  spec allows `x-` extension roles, and `validate` is what decides
+  validity, so an unknown role has to survive parsing to be reported.
+  `PaginationSchemeObject::type` likewise deserializes leniently, so one
+  malformed scheme (e.g. Giphy's former `type: offset`) does not fail the
+  whole document.
+- **Errors are a `thiserror` enum** (`syncables::Error`) instead of thrown
+  strings; every fallible function returns `syncables::Result`.
+- **Numbers are `f64`** in `PaginationResponseState`, mirroring JavaScript
+  number semantics for values read out of arbitrary JSON bodies.
+
+## Tests
+
+`tests/unit/` mirrors the original's `__tests__/unit/` layout module for
+module. Cargo builds it as one test binary (`tests/unit/main.rs`), so the
+module tree is declared there rather than discovered per file.
+
+`tests/fixtures/real-world/` holds real OpenAPI documents and pagination
+overlays vendored unmodified from apis.guru and localthought/overlays (see
+the header comment in each file for provenance). The acceptance tests run
+the ported pipeline against these and deliberately document real quirks
+rather than working around them. When extending them, keep that spirit:
+assert what actually happens against the unmodified real document, not an
+idealized result.
+
+## NLnet milestone 1
+
+The TypeScript original is the reference implementation for
+[milestone 1](https://github.com/tubsproject/syncables/blob/main/nlnet-milestones.md#1-syncables)
+of the project's NLnet grant. This port tracks it.
+
+## Generative AI use
+
+syncables-rs is developed collaboratively with **Claude Code**
+(Anthropic), an agentic coding assistant: a human directs the design and
+reviews, edits, and tests the changes it proposes before they're
+committed.
+
+As an NLnet-funded project, this follows
+[NLnet's Generative AI policy](https://nlnet.nl/foundation/policies/generativeAI/):
+
+- Commits produced with AI assistance carry a `Claude-Session: <url>`
+  trailer identifying the session that produced them.
+- [`docs/ai-logs/`](docs/ai-logs) holds prompt/output disclosure logs,
+  redacted for secrets and personal information.
+- AI-drafted content is reviewed and edited by a human before being
+  committed; it is not represented as unassisted human work.
+
+## License
+
+Apache-2.0, matching the original.

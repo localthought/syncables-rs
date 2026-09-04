@@ -1,0 +1,16 @@
+# Build artifacts
+/target/
+
+# Coverage
+/coverage
+*.profraw
+
+# VS Code
+.vscode
+!.vscode/tasks.js
+
+# JetBrains IDEs
+.idea/
+
+# Misc
+.DS_Store
