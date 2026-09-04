@@ -138,7 +138,10 @@ their own unique `id` afterward.
   items — the extension only describes pagination metadata, not where
   items live.
 - `request_builder.rs` builds query parameters for a page from a
-  `PageCursor` and computes the next cursor.
+  `PageCursor` and computes the next cursor. `next_step` wraps that with
+  the two cases a cursor alone can't express — following a `nextLink`
+  scheme's URL directly, and a `MAX_PAGES` cap so a misconfigured `Link`
+  header can't spin a traversal forever.
 - `response_parser.rs` parses that state back out of a response (dotted
   `bodyFields` paths, RFC 8288 `Link` parsing for `nextLink`-role headers)
   and derives `has_next_page`.

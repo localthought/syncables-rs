@@ -1,5 +1,7 @@
 use serde_json::json;
-use syncables::pagination::request_builder::{build_query, next_cursor, PageCursor};
+use syncables::pagination::request_builder::{
+    build_query, next_cursor, next_step, PageCursor, PageStep, MAX_PAGES,
+};
 use syncables::{PaginationResponseState, PaginationSchemeObject};
 
 fn scheme(value: serde_json::Value) -> PaginationSchemeObject {
@@ -115,4 +117,91 @@ fn yields_no_cursor_for_a_next_link_scheme() {
         ..PaginationResponseState::default()
     };
     assert!(next_cursor(&scheme, &PageCursor::default(), &state, 10).is_none());
+}
+
+#[test]
+fn next_step_stops_when_there_is_no_next_page() {
+    let state = PaginationResponseState::default();
+    assert_eq!(
+        next_step(&by_offset(), &PageCursor::default(), &state, 10, 1),
+        PageStep::Done
+    );
+}
+
+#[test]
+fn next_step_advances_an_offset_scheme() {
+    let state = PaginationResponseState {
+        has_next_page: true,
+        ..PaginationResponseState::default()
+    };
+    let step = next_step(&by_offset(), &PageCursor::default(), &state, 10, 1);
+    assert_eq!(
+        step,
+        PageStep::NextPage(PageCursor {
+            offset: Some(10),
+            ..PageCursor::default()
+        })
+    );
+}
+
+#[test]
+fn next_step_follows_a_next_link_url_directly_rather_than_a_cursor() {
+    let scheme = scheme(json!({
+        "type": "nextLink",
+        "response": { "headers": { "Link": { "role": "nextLink" } } }
+    }));
+    let state = PaginationResponseState {
+        next_link: Some("https://api.github.com/repos/o/r/issues?page=2".into()),
+        has_next_page: true,
+        ..PaginationResponseState::default()
+    };
+    let step = next_step(&scheme, &PageCursor::default(), &state, 1, 1);
+    assert_eq!(
+        step,
+        PageStep::FollowLink("https://api.github.com/repos/o/r/issues?page=2".into())
+    );
+}
+
+#[test]
+fn next_step_stops_a_next_link_scheme_with_no_link_even_if_has_next_page_is_set() {
+    let scheme = scheme(json!({
+        "type": "nextLink",
+        "response": { "headers": { "Link": { "role": "nextLink" } } }
+    }));
+    let state = PaginationResponseState {
+        has_next_page: true,
+        ..PaginationResponseState::default()
+    };
+    assert_eq!(
+        next_step(&scheme, &PageCursor::default(), &state, 1, 1),
+        PageStep::Done
+    );
+}
+
+#[test]
+fn next_step_stops_once_the_page_cap_is_reached_even_though_another_page_exists() {
+    // A misconfigured `Link` header (or any response that always claims
+    // another page) must not spin forever.
+    let state = PaginationResponseState {
+        has_next_page: true,
+        ..PaginationResponseState::default()
+    };
+    let step = next_step(&by_offset(), &PageCursor::default(), &state, 10, MAX_PAGES);
+    assert_eq!(step, PageStep::Done);
+}
+
+#[test]
+fn next_step_does_not_stop_one_page_short_of_the_cap() {
+    let state = PaginationResponseState {
+        has_next_page: true,
+        ..PaginationResponseState::default()
+    };
+    let step = next_step(
+        &by_offset(),
+        &PageCursor::default(),
+        &state,
+        10,
+        MAX_PAGES - 1,
+    );
+    assert_ne!(step, PageStep::Done);
 }
