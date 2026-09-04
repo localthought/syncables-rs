@@ -231,3 +231,72 @@ fn an_unmapped_schema_type_omits_the_datatype() {
     let ontology = derive_ontology(&document).expect("ontology derives");
     assert_eq!(term(&ontology, "widgets/property/tags").datatype, None);
 }
+
+#[test]
+fn nested_objects_and_object_arrays_get_classes_and_resource_datatypes() {
+    let document: OpenApiDocument = serde_json::from_value(json!({
+        "info": { "title": "Issues", "version": "1.0.0" },
+        "paths": {},
+        "components": {
+            "schemas": {
+                "comment": {
+                    "type": "object",
+                    "properties": {
+                        "user": {
+                            "type": "object",
+                            "required": ["login"],
+                            "properties": { "login": { "type": "string" } }
+                        },
+                        "reactions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": { "content": { "type": "string" } }
+                            }
+                        }
+                    }
+                }
+            },
+            "crudResources": {
+                "comment": {
+                    "schema": { "$ref": "#/components/schemas/comment" },
+                    "identity": { "urlTemplate": "/comments/{id}" },
+                    "collections": { "comments": { "urlTemplate": "/comments" } }
+                }
+            }
+        }
+    }))
+    .expect("valid document");
+
+    let ontology = derive_ontology(&document).expect("ontology derives");
+    assert!(ontology
+        .terms
+        .iter()
+        .any(|term| term.path == "issues/class/user"));
+    assert!(ontology
+        .terms
+        .iter()
+        .any(|term| term.path == "issues/class/reactions"));
+
+    let user = term(&ontology, "issues/property/user");
+    assert_eq!(
+        user.datatype.as_deref(),
+        Some("https://atomicdata.dev/datatypes/atomicURL")
+    );
+    assert_eq!(user.class_type.as_deref(), Some("issues/class/user"));
+
+    let reactions = term(&ontology, "issues/property/reactions");
+    assert_eq!(
+        reactions.datatype.as_deref(),
+        Some("https://atomicdata.dev/datatypes/resourceArray")
+    );
+    assert_eq!(
+        reactions.class_type.as_deref(),
+        Some("issues/class/reactions")
+    );
+
+    let user_class = term(&ontology, "issues/class/user");
+    assert!(user_class
+        .requires
+        .contains(&"issues/property/login".to_string()));
+}
