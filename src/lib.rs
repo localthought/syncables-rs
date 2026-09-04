@@ -34,6 +34,7 @@ pub mod openapi;
 pub mod pagination;
 pub mod resources;
 pub mod routing;
+pub mod sync;
 
 pub use crate::error::{Error, Result};
 
@@ -60,3 +61,5 @@ pub use crate::pagination::types::{
     PaginationSchemesMap, RequestRole, ResponseRole, SchemeType,
 };
 pub use crate::pagination::validate::validate_pagination_scheme;
+
+pub use crate::sync::storage::{InMemoryStorage, Ontology, Record, Storage, StorageError};

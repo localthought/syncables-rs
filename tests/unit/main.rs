@@ -49,3 +49,7 @@ mod resources {
 mod routing {
     mod router;
 }
+
+mod sync {
+    mod storage;
+}
