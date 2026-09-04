@@ -55,4 +55,5 @@ mod sync {
     mod credentials;
     mod ontology;
     mod resource_model;
+    mod storage;
 }

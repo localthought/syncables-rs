@@ -1,4 +1,4 @@
-//! The sync engine surface: `SyncClient`, `ClientConfig`, [`credentials`]
+//! The sync engine surface: `SyncClient`, `ClientConfig`, [`storage::Storage`]
 //! and friends.
 //!
 //! This is a *different* surface from the crate's existing
@@ -7,17 +7,17 @@
 //! [localthought/syncables-rs#1](https://github.com/localthought/syncables-rs/issues/1)
 //! and the issues under it: a generic engine that reads an OpenAPI
 //! document plus a resource model derived from it, and syncs records into
-//! a host-provided `Storage` implementation.
+//! a host-provided [`storage::Storage`] implementation.
 //! [`localthought/reflector-rs`](https://github.com/localthought/reflector-rs)
 //! is the first intended host.
 //!
-//! [`credentials`] (issue #5), [`resource_model`] (issue #3),
-//! [`constants`] (issue #6) and [`ontology`] (issue #8) exist so far. The
-//! rest of this module — `SyncClient`, `ClientConfig`, `SyncError`,
-//! `SyncReport`, the `Storage` trait — lands with the other issues in that
-//! series.
+//! [`storage`] (issue #7), [`credentials`] (issue #5), [`resource_model`]
+//! (issue #3), [`constants`] (issue #6) and [`ontology`] (issue #8) exist
+//! so far. The rest of this module — `SyncClient`, `ClientConfig`,
+//! `SyncError`, `SyncReport` — lands with the other issues in that series.
 
 pub mod constants;
 pub mod credentials;
 pub mod ontology;
 pub mod resource_model;
+pub mod storage;

@@ -75,3 +75,4 @@ pub use crate::sync::resource_model::{
     CrudAction, CrudOperation, CrudResourceObject, IdentityBindingObject, ManagedCollection,
     ResourceCollectionObject, ResourceIdentityObject, ResourceModel,
 };
+pub use crate::sync::storage::{InMemoryStorage, Record, Storage, StorageError};
