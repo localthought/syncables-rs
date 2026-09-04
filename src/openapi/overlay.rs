@@ -1,19 +1,24 @@
 //! An intentionally minimal [OpenAPI Overlay](https://spec.openapis.org/overlay/v1.0.0.html)
-//! implementation: `update`/`remove` actions with plain dot-path targets
-//! like `$.components`, not the full JSONPath grammar.
+//! implementation: `update`/`remove` actions against `$`, plain dot-paths
+//! like `$.components`, and quoted bracket segments like
+//! `$.paths['/pets/{petId}'].get` — not the full JSONPath grammar (no
+//! wildcards, filters, or numeric/array indexing).
 
-use std::path::Path;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::load::{parse_yaml, OpenApiSource};
+use super::load::{load_open_api_document, load_yaml_file, OpenApiSource};
+use super::types::OpenApiDocument;
 use crate::error::{Error, Result};
 
 /// A single overlay action.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OverlayAction {
-    /// JSONPath target — `$` or a simple dot-path such as `$.components`.
+    /// JSONPath target — `$`, a dot-path such as `$.components`, or a
+    /// dot-path with quoted bracket segments such as
+    /// `$.paths['/pets/{petId}'].get`.
     pub target: String,
     /// Object to deep-merge onto the target.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,13 +53,31 @@ pub async fn load_overlay<'a>(
     source: impl Into<OpenApiSource<'a>> + Send,
 ) -> Result<OverlayDocument> {
     let raw = match source.into() {
-        OpenApiSource::Path(path) => {
-            let text = tokio::fs::read_to_string(Path::new(path)).await?;
-            parse_yaml(&text)?
-        }
+        OpenApiSource::Path(path) => load_yaml_file(path).await?,
         OpenApiSource::Value(value) => value,
     };
     serde_json::from_value(raw).map_err(Error::from)
+}
+
+/// Loads an OpenAPI document and applies a list of Overlays to it, in the
+/// order given — a later overlay may refine what an earlier one added. Each
+/// overlay is loaded from a file path.
+///
+/// Overlays are applied to the document after its own `$ref`s are resolved
+/// (mirroring the TypeScript original's `buildDocumentFrom` in
+/// `src/sync/document.ts` of `localthought/reflector`), so an overlay's
+/// `update` can safely assume there are no refs left to chase.
+pub async fn load_open_api_document_with_overlays<'a>(
+    document: impl Into<OpenApiSource<'a>> + Send,
+    overlay_paths: &[PathBuf],
+) -> Result<OpenApiDocument> {
+    let document = load_open_api_document(document).await?;
+    let mut value = serde_json::to_value(document).map_err(Error::from)?;
+    for path in overlay_paths {
+        let overlay = load_overlay(path.as_path()).await?;
+        value = apply_overlay(&value, &overlay)?;
+    }
+    serde_json::from_value(value).map_err(Error::from)
 }
 
 fn deep_merge_value(existing: Option<&Value>, incoming: &Value) -> Value {
@@ -70,19 +93,59 @@ fn deep_merge_value(existing: Option<&Value>, incoming: &Value) -> Value {
     }
 }
 
-/// Parses the intentionally small subset of Overlay JSONPath targets this
-/// crate supports: `$` (the document root) or a plain dot-path like
-/// `$.components.schemas.Foo`. No wildcards, filters, or bracket/array
-/// indexing — every overlay this library has needed to apply so far only
-/// targets `$.components`.
+/// Tokenizes the intentionally small subset of Overlay JSONPath targets this
+/// crate supports into property segments: `$` (the document root), a
+/// dot-path like `$.components.schemas.Foo`, and quoted bracket segments
+/// like `$.paths['/repos/{owner}/{repo}/issues'].get` — needed because a
+/// path template contains slashes and braces that a plain `.split('.')`
+/// would mangle. No wildcards, filters, or numeric/array indexing.
 fn parse_target(target: &str) -> Result<Vec<String>> {
+    let unsupported = || Error::UnsupportedOverlayTarget(target.to_string());
+
     if target == "$" {
         return Ok(Vec::new());
     }
-    if !target.starts_with("$.") || target.contains(['[', ']', '*']) {
-        return Err(Error::UnsupportedOverlayTarget(target.to_string()));
+    if !target.starts_with('$') {
+        return Err(unsupported());
     }
-    Ok(target[2..].split('.').map(str::to_string).collect())
+
+    let mut segments = Vec::new();
+    let bytes = target.as_bytes();
+    let mut index = 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'.' => {
+                index += 1;
+                let start = index;
+                while index < bytes.len() && bytes[index] != b'.' && bytes[index] != b'[' {
+                    index += 1;
+                }
+                if index == start {
+                    return Err(unsupported());
+                }
+                segments.push(target[start..index].to_string());
+            }
+            b'[' => {
+                let quote = *bytes.get(index + 1).ok_or_else(unsupported)?;
+                if quote != b'\'' && quote != b'"' {
+                    return Err(unsupported());
+                }
+                let key_start = index + 2;
+                let end = target[key_start..]
+                    .find(quote as char)
+                    .map(|offset| key_start + offset)
+                    .ok_or_else(unsupported)?;
+                segments.push(target[key_start..end].to_string());
+                index = end + 1;
+                if bytes.get(index) != Some(&b']') {
+                    return Err(unsupported());
+                }
+                index += 1;
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(segments)
 }
 
 fn navigate<'v>(
