@@ -52,4 +52,5 @@ mod routing {
 
 mod sync {
     mod credentials;
+    mod resource_model;
 }
