@@ -10,7 +10,20 @@ Reads an OpenAPI document and gives you:
 - an **API client** that talks to any server implementing that OpenAPI
   document and keeps a local copy of each resource collection in sync.
 
+Alongside that port, the crate also carries a second, unrelated surface:
+a **sync engine** (`SyncClient`) that reads a document's
+[CRUD Causality Extension](https://github.com/pondersource/openapi-extensions/tree/main/spec/crud-causality)
+(`components.crudResources`) and syncs records — including nested
+collections, walked once per parent record — into a host-provided
+`Storage` implementation, deriving a neutral, Atomic-Data-shaped ontology
+along the way without the crate itself depending on `atomic_lib`. This is
+new scope, not part of the original TypeScript port; see
+[Sync engine](#sync-engine) below.
+
 ## Port status
+
+This section covers the original TypeScript port only — see
+[Sync engine](#sync-engine) below for that surface's status.
 
 This crate is **scaffolding**. The module tree mirrors the TypeScript
 original's `src/` one-to-one, and the following are ported and tested:
@@ -65,6 +78,56 @@ A "resource" is any pair of an OpenAPI collection path and its matching
 item path, e.g. `/pets` and `/pets/{petId}`. Paths without that pairing
 (health checks, one-off actions, etc.) are served from their documented
 examples/schemas but aren't treated as syncable resources.
+
+## Sync engine
+
+New scope, not part of the original TypeScript port; tracked by
+[issues #1–#9](https://github.com/localthought/syncables-rs/issues/1).
+Where the port above discovers resources from plain collection/item path
+pairing, the sync engine derives a richer resource model from a
+document's [CRUD Causality Extension](https://github.com/pondersource/openapi-extensions/tree/main/spec/crud-causality)
+(`components.crudResources`) — including nested collections, like a
+repository's issues and each issue's comments — and drives a full,
+paginated read of every collection into a host-provided `Storage`,
+deriving a neutral ontology (Classes and Properties, Atomic-Data-shaped
+but not Atomic-Data-typed) along the way.
+
+| Area | Module | Status |
+| --- | --- | --- |
+| Resource model (`crudResources`, `x-crud`) | `sync::resource_model` | ported and tested |
+| Binding configured constants into path templates | `sync::constants` | ported and tested |
+| Credentials, API base URL | `sync::credentials` | ported and tested |
+| Ontology derivation | `sync::ontology` | ported and tested |
+| `Storage` trait, `InMemoryStorage` | `sync::storage` | ported and tested |
+| `SyncClient::sync()` — full read | `sync::client` | ported and tested |
+| `SyncClient` — local-first write-back | `sync::client` | **not implemented** — [#9](https://github.com/localthought/syncables-rs/issues/9) |
+
+```rust,ignore
+use std::sync::Arc;
+use syncables::{ClientConfig, Credentials, InMemoryStorage, SyncClient};
+
+let config = ClientConfig {
+    document: "./github-issues.openapi.yaml".into(),
+    overlays: vec!["./auth-overlay.yaml".into(), "./crud-causality-overlay.yaml".into()],
+    credentials: Credentials::Bearer(std::env::var("GITHUB_TOKEN")?),
+    constants: [("owner".to_string(), "localthought".to_string()),
+                ("repo".to_string(), "test-repo-1".to_string())].into(),
+    ontology_base_url: "https://my-ontologies.com".to_string(),
+};
+
+let client = SyncClient::new(config, Arc::new(my_fetch_impl))?;
+let storage = InMemoryStorage::new();
+let report = client.sync(&storage).await?; // walks issues, then each issue's comments
+```
+
+`SyncClient::new` takes an `Arc<dyn Fetch>` (the same injectable-transport
+trait `ApiClient` above uses) alongside `ClientConfig` — the crate has no
+HTTP client dependency of its own, so a host supplies one. This is the one
+deliberate divergence from the `ClientConfig`/`SyncClient` contract
+[`localthought/reflector-rs`](https://github.com/localthought/reflector-rs)
+is already written against in its `src/syncables.rs`, which otherwise this
+module matches field-for-field; that module is meant to be deleted once
+reflector-rs points its `use`s here instead.
 
 ## Differences from the TypeScript original
 
