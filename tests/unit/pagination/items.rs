@@ -1,6 +1,6 @@
 use serde_json::json;
 use syncables::pagination::items::{effective_properties, item_schema_for, locate_items_field};
-use syncables::{PaginationSchemeObject, SchemaObject};
+use syncables::{PaginationSchemeObject, SchemaObject, SchemaType};
 
 fn schema(value: serde_json::Value) -> SchemaObject {
     serde_json::from_value(value).expect("valid schema")
@@ -61,7 +61,10 @@ fn excludes_fields_the_scheme_claims_for_metadata() {
 fn unwraps_a_bare_array_response_schema() {
     let response = schema(json!({ "type": "array", "items": { "type": "string" } }));
     let item = item_schema_for(Some(&response), None).expect("has an item schema");
-    assert_eq!(item.schema_type.as_deref(), Some("string"));
+    assert_eq!(
+        item.schema_type.as_ref().and_then(SchemaType::primary),
+        Some("string")
+    );
 }
 
 #[test]
@@ -71,5 +74,8 @@ fn unwraps_an_enveloped_response_schema() {
         "properties": { "data": { "type": "array", "items": { "type": "string" } } }
     }));
     let item = item_schema_for(Some(&response), None).expect("has an item schema");
-    assert_eq!(item.schema_type.as_deref(), Some("string"));
+    assert_eq!(
+        item.schema_type.as_ref().and_then(SchemaType::primary),
+        Some("string")
+    );
 }

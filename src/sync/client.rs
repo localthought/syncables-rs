@@ -448,7 +448,8 @@ fn response_items(
     scheme: Option<&PaginationSchemeObject>,
     body: &Value,
 ) -> std::result::Result<Vec<Map<String, Value>>, String> {
-    let is_bare_array = schema.and_then(|s| s.schema_type.as_deref()) == Some("array");
+    let is_bare_array =
+        schema.is_some_and(|s| s.schema_type.as_ref().is_some_and(|t| t.contains("array")));
     let array = if is_bare_array {
         body.as_array()
     } else if let Some(field) = locate_items_field(schema, scheme) {

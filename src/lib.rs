@@ -45,7 +45,7 @@ pub use crate::openapi::overlay::{
 };
 pub use crate::openapi::resolve_refs::resolve_refs;
 pub use crate::openapi::types::{
-    OpenApiDocument, OperationObject, ParameterObject, SchemaObject, ServerObject,
+    OpenApiDocument, OperationObject, ParameterObject, SchemaObject, SchemaType, ServerObject,
 };
 
 pub use crate::resources::discover::{discover_resources, ResourceRoute};

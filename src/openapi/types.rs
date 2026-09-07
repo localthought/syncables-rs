@@ -15,12 +15,47 @@ use crate::pagination::types::PaginationSchemesMap;
 /// picks the *first* array-typed property of a response schema.
 pub type JsonMap = IndexMap<String, Value>;
 
+/// The `type` keyword of a JSON Schema: either a single type name, or (as
+/// allowed by OpenAPI 3.1 / JSON Schema 2020-12) an array of type names —
+/// most commonly `[T, "null"]` to express a nullable `T`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaType {
+    /// `type: "string"`.
+    Single(String),
+    /// `type: ["string", "null"]`.
+    Multiple(Vec<String>),
+}
+
+impl SchemaType {
+    /// Whether this schema type includes `name`, single or multiple form.
+    pub fn contains(&self, name: &str) -> bool {
+        match self {
+            SchemaType::Single(single) => single == name,
+            SchemaType::Multiple(types) => types.iter().any(|t| t == name),
+        }
+    }
+
+    /// The type call sites that only handle a single type should treat this
+    /// schema as. For the multiple-type form, the first entry that isn't
+    /// `"null"` — the nullable-type array form (`[T, "null"]`) is the only
+    /// multi-type shape real documents use in practice. `None` if every
+    /// entry is `"null"` or the array is empty.
+    pub fn primary(&self) -> Option<&str> {
+        match self {
+            SchemaType::Single(single) => Some(single.as_str()),
+            SchemaType::Multiple(types) => types.iter().map(String::as_str).find(|t| *t != "null"),
+        }
+    }
+}
+
 /// A JSON Schema subset, as it appears inside an OpenAPI document.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SchemaObject {
-    /// `type` keyword (`string`, `integer`, `object`, `array`, ...).
+    /// `type` keyword (`string`, `integer`, `object`, `array`, ...), or an
+    /// array of type names per the JSON Schema 2020-12 nullable form.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    pub schema_type: Option<String>,
+    pub schema_type: Option<SchemaType>,
     /// `format` keyword (`date-time`, `uuid`, `email`, ...).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,

@@ -32,6 +32,7 @@ mod mock_server {
 mod openapi {
     mod overlay;
     mod resolve_refs;
+    mod types;
 }
 
 mod pagination {

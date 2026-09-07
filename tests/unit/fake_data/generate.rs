@@ -71,3 +71,9 @@ fn wraps_an_array_schema_around_one_generated_item() {
 fn generates_null_for_a_missing_schema() {
     assert_eq!(generate_from_schema(None), json!(null));
 }
+
+#[test]
+fn generates_from_a_nullable_array_type_schema() {
+    let generated = generate_from_schema(Some(&schema(json!({ "type": ["string", "null"] }))));
+    assert!(generated.is_string());
+}

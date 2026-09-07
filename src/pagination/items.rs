@@ -62,7 +62,11 @@ pub fn locate_items_field(
     let excluded = metadata_field_roots(scheme);
 
     for (name, property_schema) in &properties {
-        if !excluded.contains(name) && property_schema.schema_type.as_deref() == Some("array") {
+        let is_array = property_schema
+            .schema_type
+            .as_ref()
+            .is_some_and(|t| t.contains("array"));
+        if !excluded.contains(name) && is_array {
             return Some(name.clone());
         }
     }
@@ -80,7 +84,11 @@ pub fn item_schema_for(
     scheme: Option<&PaginationSchemeObject>,
 ) -> Option<SchemaObject> {
     if let Some(schema) = schema {
-        if schema.schema_type.as_deref() == Some("array") {
+        if schema
+            .schema_type
+            .as_ref()
+            .is_some_and(|t| t.contains("array"))
+        {
             return schema.items.as_deref().cloned();
         }
     }

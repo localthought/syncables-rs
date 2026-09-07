@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Map, Number, Value};
 
-use crate::openapi::types::SchemaObject;
+use crate::openapi::types::{SchemaObject, SchemaType};
 
 static STRING_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -48,7 +48,7 @@ pub fn generate_from_schema(schema: Option<&SchemaObject>) -> Value {
         }
     }
 
-    match schema.schema_type.as_deref() {
+    match schema.schema_type.as_ref().and_then(SchemaType::primary) {
         Some("string") => Value::String(generate_string(schema)),
         Some("integer" | "number") => {
             Number::from_f64(schema.minimum.unwrap_or(1.0)).map_or(Value::Null, Value::Number)

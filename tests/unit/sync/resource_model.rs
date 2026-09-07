@@ -1,7 +1,7 @@
 use serde_json::json;
 use syncables::{
     crud_operation, discover_resource_model, CollectionMembership, CrudAction, Error,
-    OpenApiDocument,
+    OpenApiDocument, SchemaType,
 };
 
 /// A document shaped like the GitHub crud-causality overlay's own example:
@@ -207,7 +207,8 @@ fn reads_a_create_operations_added_fields_and_membership() {
         number
             .schema
             .as_ref()
-            .and_then(|s| s.schema_type.as_deref()),
+            .and_then(|s| s.schema_type.as_ref())
+            .and_then(SchemaType::primary),
         Some("integer")
     );
 }
