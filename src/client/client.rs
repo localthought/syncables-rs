@@ -73,7 +73,13 @@ pub struct HttpResponse {
 /// The client's only extension point for how requests reach the network.
 ///
 /// This is the Rust equivalent of the original's injectable `fetch`.
-#[async_trait]
+///
+/// `?Send` on wasm32: that target is single-threaded, and a browser-hosted
+/// implementation's future (e.g. wrapping a JS `Promise`) generally isn't
+/// `Send` — matching the convention `atomic_lib` (this crate's sibling
+/// dependency in `reflector-rs`) uses for its own `Storelike` trait.
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait Fetch: Send + Sync {
     /// Sends one request and returns the response.
     async fn fetch(&self, request: HttpRequest) -> Result<HttpResponse>;

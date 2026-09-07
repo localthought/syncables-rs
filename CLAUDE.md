@@ -228,7 +228,14 @@ Atomic Data is the host's job.
   `namespace`/`resource`/`id` so records sharing a resource name across
   different parents (every issue's comments are all `issueComment`) don't
   collide. `InMemoryStorage` is the reference implementation used by this
-  crate's own tests.
+  crate's own tests. `Storage` (and `client::client::Fetch`) use
+  `#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]` /
+  `#[cfg_attr(not(target_arch = "wasm32"), async_trait)]` — see the
+  README's [WASM compatibility](README.md#wasm-compatibility) section for
+  why a wasm32 host's implementation generally isn't `Send`. A new
+  `#[async_trait]`-annotated trait or impl in `sync::client`'s or
+  `client::client`'s public API needs the same treatment if a wasm32 host
+  is expected to implement or call it.
 - **`client.rs`** — `SyncClient::sync()`, the read half of #9: loads the
   document + overlays, derives the resource model, validates constants,
   derives and stores the ontology (before any record), then walks every

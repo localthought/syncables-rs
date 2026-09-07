@@ -68,3 +68,35 @@ Deliberately left `tests/` and dev-dependencies (`tokio`'s `full` feature,
 `#[tokio::test]`) native-only — they were never in scope for issue #25,
 which is about the library building for wasm32, not the test suite
 running there.
+
+## Turn 2
+
+**Context:** this PR (#26) merged to `main`; work then moved to
+`localthought/reflector-rs` issue #19 of the same title, which explicitly
+waits on this one. Wiring `reflector-rs`'s `AtomicStorage`/`ReqwestFetch`
+against the newly-wasm32-buildable `syncables` revealed a second issue
+this crate's own build check hadn't caught: `#[async_trait]`'s default
+`Send`-bounded futures don't fit a wasm32 host, whose implementations
+(wrapping `atomic_lib`'s `Storelike`, or a JS `fetch` promise) generally
+return non-`Send` futures — that target is single-threaded.
+
+**Assistant output (summarized):**
+
+Applied the same `#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]`
+/ `#[cfg_attr(not(target_arch = "wasm32"), async_trait)]` split
+`atomic_lib` itself already uses for its `Storelike` trait, to the two
+traits `reflector-rs` implements: `client::client::Fetch` and
+`sync::storage::Storage` (plus `InMemoryStorage`'s own impl of `Storage`,
+which needs the identical attribute on the impl side to type-check against
+the now-conditionally-`?Send` trait). Left `client::storage::StorageAdapter`
+alone — nothing currently implements it with a non-`Send` future, so there
+was no compile failure to fix there, and changing it speculatively would
+be scope creep beyond what #25 or the reflector-rs work needed.
+
+Verified: `cargo build`/`clippy --target wasm32-unknown-unknown --lib -- -D
+warnings` clean; natively, `cargo build`, `cargo test` (142 passed),
+`cargo clippy --all-targets --all-features -- -D warnings`, and `cargo fmt
+--all --check` all still pass. Documented the `?Send` convention in
+README and CLAUDE.md. Opened and merged a second PR for this fix, then
+continued in `reflector-rs` (own log entry there) pointing its `syncables`
+git `rev` at the new commit.
