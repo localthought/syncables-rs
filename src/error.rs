@@ -32,6 +32,16 @@ pub enum Error {
         source: Box<Error>,
     },
 
+    /// A document or overlay was given as a file path in a `wasm32` build.
+    /// `tokio::fs` has no wasm32 support at all (unlike `net` or
+    /// `rt-multi-thread`, it isn't just unused — it doesn't compile there),
+    /// so a wasm32 host must pass an in-memory [`OpenApiSource::Value`]
+    /// instead.
+    ///
+    /// [`OpenApiSource::Value`]: crate::openapi::load::OpenApiSource::Value
+    #[error("reading a document from a file path is not supported when compiled for wasm32; pass an in-memory OpenApiSource::Value instead")]
+    WasmFileAccessUnsupported,
+
     /// An overlay used a JSONPath target outside the supported subset.
     #[error(
         "unsupported overlay target \"{0}\": only \"$\", simple dot-paths like \

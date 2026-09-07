@@ -79,6 +79,31 @@ item path, e.g. `/pets` and `/pets/{petId}`. Paths without that pairing
 (health checks, one-off actions, etc.) are served from their documented
 examples/schemas but aren't treated as syncable resources.
 
+## WASM compatibility
+
+The library builds for `wasm32-unknown-unknown` (`cargo build --target
+wasm32-unknown-unknown --lib`), so a browser-hosted client can depend on
+it — see [issue #25](https://github.com/localthought/syncables-rs/issues/25).
+Two things follow from that target having no filesystem or native
+networking:
+
+- `tokio`'s `fs` feature — the only tokio feature this crate actually
+  uses, in `openapi::load::load_yaml_file` — has no wasm32 support at
+  all, so it's a `target.'cfg(not(target_arch = "wasm32"))'` dependency.
+  On wasm32, loading an [`OpenApiSource::Path`] fails with
+  `Error::WasmFileAccessUnsupported`; pass an in-memory
+  [`OpenApiSource::Value`] instead (the mock server and sync engine's own
+  document loading only ever need a path when a *native* host chooses to
+  read one off disk).
+- `uuid`'s `v4` feature needs a source of randomness, and the `js`
+  feature (backed by `getrandom`'s wasm-bindgen support) supplies one on
+  wasm32 without affecting other targets.
+
+The crate's tests, and CI's full `cargo test`, still only run natively —
+`tests/` and dev-dependencies (`tokio`'s `full` feature, `#[tokio::test]`)
+are not wasm32-compatible and aren't meant to be; CI instead checks
+`cargo build`/`clippy --target wasm32-unknown-unknown --lib` separately.
+
 ## Sync engine
 
 New scope, not part of the original TypeScript port; tracked by
