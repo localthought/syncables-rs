@@ -20,7 +20,7 @@ use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::error::{Error, Result};
-use crate::openapi::types::{OpenApiDocument, SchemaObject};
+use crate::openapi::types::{OpenApiDocument, SchemaObject, SchemaType};
 
 use super::resource_model::{crud_resources, CrudResourceObject};
 
@@ -134,7 +134,8 @@ fn claim_shortname(claimed: &mut IndexMap<String, String>, original: &str) -> Re
 /// Maps a property schema's `type`/`format` to an Atomic Data datatype URL.
 /// A type this mapping doesn't recognize is `None` rather than guessed.
 fn datatype_url(schema: &SchemaObject) -> Option<String> {
-    match (schema.schema_type.as_deref(), schema.format.as_deref()) {
+    let primary = schema.schema_type.as_ref().and_then(SchemaType::primary);
+    match (primary, schema.format.as_deref()) {
         (Some("string"), Some("date-time")) => Some(DATATYPE_TIMESTAMP.to_string()),
         (Some("string"), Some("date")) => Some(DATATYPE_DATE.to_string()),
         (Some("string"), _) => Some(DATATYPE_STRING.to_string()),
@@ -231,11 +232,16 @@ pub fn derive_ontology(document: &OpenApiDocument) -> Result<Ontology> {
                     shortname,
                     description: schema_description(field_schema)
                         .unwrap_or_else(|| format!("`{field_name}` of `{resource_name}`.")),
-                    datatype: match field_schema.schema_type.as_deref() {
+                    datatype: match field_schema
+                        .schema_type
+                        .as_ref()
+                        .and_then(SchemaType::primary)
+                    {
                         Some("object") => Some(DATATYPE_ATOMIC_URL.to_string()),
                         Some("array")
                             if field_schema.items.as_deref().is_some_and(|item| {
-                                item.schema_type.as_deref() == Some("object")
+                                item.schema_type.as_ref().and_then(SchemaType::primary)
+                                    == Some("object")
                             }) =>
                         {
                             Some(DATATYPE_RESOURCE_ARRAY.to_string())
@@ -311,12 +317,11 @@ fn ontology_identity(document: &OpenApiDocument) -> (String, String) {
 }
 
 fn nested_object_schema(schema: &SchemaObject) -> Option<&SchemaObject> {
-    match schema.schema_type.as_deref() {
+    match schema.schema_type.as_ref().and_then(SchemaType::primary) {
         Some("object") => Some(schema),
-        Some("array") => schema
-            .items
-            .as_deref()
-            .filter(|item| item.schema_type.as_deref() == Some("object")),
+        Some("array") => schema.items.as_deref().filter(|item| {
+            item.schema_type.as_ref().and_then(SchemaType::primary) == Some("object")
+        }),
         _ => None,
     }
 }
@@ -358,7 +363,11 @@ fn add_nested_class(
                 shortname,
                 description: schema_description(field_schema)
                     .unwrap_or_else(|| format!("`{field_name}` of `{name}`.")),
-                datatype: match field_schema.schema_type.as_deref() {
+                datatype: match field_schema
+                    .schema_type
+                    .as_ref()
+                    .and_then(SchemaType::primary)
+                {
                     Some("object") => Some(DATATYPE_ATOMIC_URL.to_string()),
                     Some("array") if nested_object_schema(field_schema).is_some() => {
                         Some(DATATYPE_RESOURCE_ARRAY.to_string())
