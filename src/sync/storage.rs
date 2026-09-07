@@ -102,7 +102,14 @@ impl StorageError {
 /// it. That ordering is the engine's responsibility
 /// ([issue #9](https://github.com/localthought/syncables-rs/issues/9));
 /// `reflector-rs`'s `AtomicStorage` is written against it.
-#[async_trait]
+///
+/// `?Send` on wasm32: that target is single-threaded, and a browser-hosted
+/// implementation backed by a JS API generally returns a future that isn't
+/// `Send` (`reflector-rs`'s `AtomicStorage`, wrapping `atomic_lib`'s
+/// `Storelike`, is exactly this case — `atomic_lib` uses the same
+/// convention for its own trait).
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait Storage: Send + Sync {
     /// Inserts or replaces a record, keyed by its `namespace`, `resource`
     /// and `id`.
@@ -159,7 +166,8 @@ impl InMemoryStorage {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl Storage for InMemoryStorage {
     async fn put(&self, record: &Record) -> Result<(), StorageError> {
         let key = (

@@ -99,6 +99,18 @@ networking:
   feature (backed by `getrandom`'s wasm-bindgen support) supplies one on
   wasm32 without affecting other targets.
 
+A wasm32 host implementing [`Fetch`](client::client::Fetch) or
+[`Storage`](sync::storage::Storage) — e.g. wrapping a JS `Promise` or a
+browser storage API — will generally do so with a future that isn't `Send`
+(that target is single-threaded). Both traits, and `InMemoryStorage`'s own
+implementation of `Storage`, use
+`#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]` /
+`#[cfg_attr(not(target_arch = "wasm32"), async_trait)]` to relax that bound
+only on wasm32 — the same convention
+[`atomic_lib`](https://github.com/ontola/atomic-server) (`reflector-rs`'s
+other sync-engine dependency) uses for its own `Storelike` trait, so a
+`reflector-rs`-shaped host's futures line up on both sides.
+
 The crate's tests, and CI's full `cargo test`, still only run natively —
 `tests/` and dev-dependencies (`tokio`'s `full` feature, `#[tokio::test]`)
 are not wasm32-compatible and aren't meant to be; CI instead checks
