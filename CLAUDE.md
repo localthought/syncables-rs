@@ -66,14 +66,23 @@ cargo test --test unit -- --exact routing::router::binds_path_variables
 cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all                                   # format in place
 cargo fmt --all --check                           # check formatting
+cargo build --target wasm32-unknown-unknown --lib # the library builds for wasm32; tests don't
+cargo clippy --target wasm32-unknown-unknown --lib -- -D warnings
 ```
 
 CI (`.github/workflows/rust.yml`) runs fmt, clippy with `-D warnings`,
-the test suite, and a release build — run those four locally before
-pushing.
+the test suite, a release build, and the two wasm32 checks above — run
+those locally before pushing.
 
 This crate has no binary target — it's a library, so there's no
 `cargo run`.
+
+**The library builds for `wasm32-unknown-unknown`** (see the README's
+[WASM compatibility](README.md#wasm-compatibility) section for the two
+adjustments that took — a `target.'cfg(...)'`-gated `tokio` dependency and
+`uuid`'s `js` feature). Keep it that way: any new dependency or `tokio`
+feature added to `[dependencies]` (not `[dev-dependencies]`, which never
+builds for wasm32) needs checking against that target before it lands.
 
 ## Architecture
 
@@ -96,6 +105,10 @@ the original's directory layout one-to-one:
    wildcards, filters, or numeric/array indexing).
    `load_open_api_document_with_overlays` loads a document and applies a
    list of overlay files to it in order, after `$ref`s are resolved.
+   Loading from a file path (`load_yaml_file`, via `tokio::fs`) is
+   `#[cfg(not(target_arch = "wasm32"))]` only — that tokio feature has no
+   wasm32 support — with a wasm32 stub that errors, directing callers to
+   the in-memory `OpenApiSource::Value` path instead.
 
 2. **`resources/discover.rs`** — turns `document.paths` into a list of
    `ResourceRoute`s by pairing each collection path (`/pets`) with its

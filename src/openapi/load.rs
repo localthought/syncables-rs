@@ -63,6 +63,7 @@ pub fn parse_yaml(text: &str) -> Result<Value> {
 /// [`Error::FileLoad`] so it names the offending path — a bare
 /// [`std::io::Error`] from a failed read doesn't otherwise mention which
 /// file was missing or unreadable.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn load_yaml_file(path: &Path) -> Result<Value> {
     async {
         let text = tokio::fs::read_to_string(path).await?;
@@ -72,5 +73,16 @@ pub(crate) async fn load_yaml_file(path: &Path) -> Result<Value> {
     .map_err(|source| Error::FileLoad {
         path: path.to_path_buf(),
         source: Box::new(source),
+    })
+}
+
+/// `tokio::fs` has no wasm32 support at all, so a wasm32 build can't read a
+/// document from a file path the way a native build does — there's no
+/// browser filesystem to read it from. Use [`OpenApiSource::Value`] instead.
+#[cfg(target_arch = "wasm32")]
+pub(crate) async fn load_yaml_file(path: &Path) -> Result<Value> {
+    Err(Error::FileLoad {
+        path: path.to_path_buf(),
+        source: Box::new(Error::WasmFileAccessUnsupported),
     })
 }

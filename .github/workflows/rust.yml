@@ -17,3 +17,8 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
       - run: cargo build --release
+      - name: Install wasm32-unknown-unknown target
+        run: rustup target add wasm32-unknown-unknown
+      - name: Build for wasm32 (library only — tests use dev-dependencies that aren't wasm-compatible)
+        run: cargo build --target wasm32-unknown-unknown --lib
+      - run: cargo clippy --target wasm32-unknown-unknown --lib -- -D warnings
