@@ -570,3 +570,51 @@ async fn tracks_every_url_it_requested() {
         vec!["https://api.example.com/repos/acme/widgets/issues".to_string()]
     );
 }
+
+#[tokio::test]
+async fn syncs_in_memory_without_opening_the_configured_path() {
+    let document = syncables::load_open_api_document(flat_document(Some(
+        json!([{ "url": "https://api.example.com" }]),
+    )))
+    .await
+    .unwrap();
+    let fetch = MockFetch::default().respond_json(
+        "https://api.example.com/repos/acme/widgets/issues",
+        200,
+        &[],
+        json!([
+            { "number": 1, "title": "First issue" },
+            { "number": 2, "title": "Second issue" }
+        ]),
+    );
+    let client = SyncClient::new(
+        config(
+            Path::new("/this-file-must-never-be-opened"),
+            &[("owner", "acme"), ("repo", "widgets")],
+        ),
+        Arc::new(fetch),
+    )
+    .expect("valid config");
+
+    let storage = InMemoryStorage::new();
+    let report = client
+        .sync_document(&document, &storage)
+        .await
+        .expect("sync succeeds");
+
+    assert!(
+        report.errors.is_empty(),
+        "unexpected errors: {:?}",
+        report.errors
+    );
+    assert_eq!(report.read.get("issue"), Some(&2));
+    assert_eq!(report.ontology_terms, 1);
+    assert_eq!(storage.ontologies().len(), 1);
+
+    let first = storage
+        .get("acme/widgets", "issue", "1")
+        .await
+        .expect("get succeeds")
+        .expect("record present");
+    assert_eq!(first.value.get("title"), Some(&json!("First issue")));
+}

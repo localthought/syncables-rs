@@ -80,7 +80,7 @@ pub struct HttpResponse {
 /// dependency in `reflector-rs`) uses for its own `Storelike` trait.
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-pub trait Fetch: Send + Sync {
+pub trait Fetch: FetchBounds {
     /// Sends one request and returns the response.
     async fn fetch(&self, request: HttpRequest) -> Result<HttpResponse>;
 }
@@ -346,6 +346,9 @@ impl ApiClient {
 }
 
 /// Builds a client for `document` against the server in `options`.
+// Browser options may own a JS callback. Keep the shared Arc-shaped API on
+// both targets; WASM hosts never send it across threads.
+#[cfg_attr(target_arch = "wasm32", allow(clippy::arc_with_non_send_sync))]
 pub fn create_api_client(document: OpenApiDocument, options: ApiClientOptions) -> ApiClient {
     let routes = discover_resources(&document.paths);
     let storage = options
@@ -361,3 +364,14 @@ pub fn create_api_client(document: OpenApiDocument, options: ApiClientOptions) -
         options: Arc::new(options),
     }
 }
+
+/// Native transports must be thread safe; browser transports run on one JS thread.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait FetchBounds: Send + Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync> FetchBounds for T {}
+/// Browser transports may own JavaScript callbacks.
+#[cfg(target_arch = "wasm32")]
+pub trait FetchBounds {}
+#[cfg(target_arch = "wasm32")]
+impl<T> FetchBounds for T {}

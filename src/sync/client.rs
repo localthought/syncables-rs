@@ -165,15 +165,24 @@ impl SyncClient {
             &self.config.overlays,
         )
         .await?;
-        let model = discover_resource_model(&document)?;
-        validate_constants(&document, &model, &self.config.constants)?;
+        self.sync_document(&document, storage).await
+    }
+
+    /// Sync an already loaded, resolved document without filesystem access.
+    pub async fn sync_document(
+        &self,
+        document: &OpenApiDocument,
+        storage: &dyn Storage,
+    ) -> Result<SyncReport, SyncError> {
+        let model = discover_resource_model(document)?;
+        validate_constants(document, &model, &self.config.constants)?;
 
         // Fail before writing anything if there's nowhere to sync from —
         // no point minting an ontology for a sync that can't run at all.
-        let base = base_url(&document)
+        let base = base_url(document)
             .ok_or_else(|| SyncError::Document("document declares no servers".to_string()))?;
 
-        let ontology = derive_ontology(&document)?;
+        let ontology = derive_ontology(document)?;
         storage
             .put_ontology(&ontology)
             .await
@@ -183,7 +192,7 @@ impl SyncClient {
             ontology_terms: ontology.terms.len(),
             ..SyncReport::default()
         };
-        self.walk_all(&document, &model, base, storage, &mut report)
+        self.walk_all(document, &model, base, storage, &mut report)
             .await;
         Ok(report)
     }

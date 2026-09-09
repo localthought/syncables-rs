@@ -13,7 +13,8 @@ use crate::error::Result;
 ///
 /// Implement this to persist somewhere other than memory;
 /// [`InMemoryStorageAdapter`] is the default.
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait StorageAdapter: Send + Sync {
     /// Every record held for `resource`.
     async fn list(&self, resource: &str) -> Result<Vec<Map<String, Value>>>;
@@ -41,7 +42,8 @@ impl InMemoryStorageAdapter {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl StorageAdapter for InMemoryStorageAdapter {
     async fn list(&self, resource: &str) -> Result<Vec<Map<String, Value>>> {
         let mut collections = self.collections.lock().expect("storage mutex poisoned");
