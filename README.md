@@ -95,9 +95,8 @@ networking:
   [`OpenApiSource::Value`] instead (the mock server and sync engine's own
   document loading only ever need a path when a *native* host chooses to
   read one off disk).
-- `uuid`'s `v4` feature needs a source of randomness, and the `js`
-  feature (backed by `getrandom`'s wasm-bindgen support) supplies one on
-  wasm32 without affecting other targets.
+- `uuid` is only needed by native test fixtures and is a dev-dependency;
+  browser library builds do not pull in its randomness backend.
 
 A wasm32 host implementing [`Fetch`](client::client::Fetch) or
 [`Storage`](sync::storage::Storage) — e.g. wrapping a JS `Promise` or a
@@ -233,3 +232,14 @@ As an NLnet-funded project, this follows
 ## License
 
 Apache-2.0, matching the original.
+
+## Browser / WASM
+
+`cargo check --target wasm32-unknown-unknown --lib` builds the engine without
+Tokio filesystem or native runtime dependencies. Load catalog text with
+`openapi::load::parse_yaml`, pass the resulting value to
+`load_open_api_document`, then call `SyncClient::sync_document(&doc, &storage)`.
+This path never opens `ClientConfig.document` or `overlays`; apply overlays in
+memory before calling it. File sources return an explicit unsupported error
+in WASM. Implement browser `Fetch` with `#[async_trait(?Send)]`; it may hold
+a JS callback. Native `Fetch` keeps its Send + Sync contract.

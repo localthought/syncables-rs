@@ -20,7 +20,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 thiserror = "2"
-uuid = { version = "1", features = ["v4", "js"] }
 
 # `tokio::fs` (used only by `openapi::load::load_yaml_file`) has no wasm32
 # support at all — see that module's wasm32 stub. Every other tokio use in
@@ -30,6 +29,7 @@ uuid = { version = "1", features = ["v4", "js"] }
 tokio = { version = "1", features = ["fs"] }
 
 [dev-dependencies]
+uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["full"] }
 
 [lints.rust]
